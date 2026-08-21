@@ -2,9 +2,9 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=p2p-20260821';
-import * as tex from './tex.js?v=p2p-20260821';
-import { audio } from './audio.js?v=p2p-20260821';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=world-pass-2';
+import * as tex from './tex.js?v=world-pass-2';
+import { audio } from './audio.js?v=world-pass-2';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
@@ -41,11 +41,13 @@ class PackCar {
     this.racer = racer;
     this.track = track;
     this.isPlayer = isPlayer;
+    this.gridIndex = gridIndex;
     this.s = 6 - Math.floor(gridIndex / 2) * 8;
     this.x = LANE_PLAYER + (gridIndex % 2 === 0 ? 2.6 : -2.6);
     this.mode = 'road';           // road | shortcut
     this.ss = 0;                  // arc position inside the shortcut
     this.speed = 0;
+    this.lateralVel = 0;
     this.yOff = 0;
     this.vy = 0;
     this.grounded = true;
@@ -198,6 +200,7 @@ export class Race {
       return car;
     });
     this.player = this.demo ? this.cars[0] : this.cars[opts.playerIndex];
+    this.cars.forEach((car) => { car.wasAhead = car.s > this.player.s; });
 
     // Traffic fleet.
     this.traffic = [];
@@ -335,6 +338,7 @@ export class Race {
       this.airPhysics(car, dt);
     });
 
+    if (!this.demo) this.updatePassEvents();
     this.updateTraffic(dt);
     this.updateAnimals(dt);
     this.resolvePackCollisions(dt);
@@ -448,15 +452,29 @@ export class Race {
     const grip = car.grounded ? 1 : 0.35;
     const wheelieSteer = wheelie ? 0.5 : 1;
     const authority = r.steer * grip * wheelieSteer;
-    const dx = steerIn * authority * (15 + car.speed * 0.24) * dt;
+    // Build lateral momentum instead of directly nudging the car sideways.
+    // Quick corrections still work, but a long turn now loads the chassis,
+    // scrubs speed, and needs an opposite input to settle.
+    const steerForce = steerIn * authority * (34 + car.speed * 0.55);
+    car.lateralVel += steerForce * dt;
+    car.lateralVel *= Math.exp(-(car.grounded ? 3.4 : 1.25) * dt);
+    car.lateralVel = THREE.MathUtils.clamp(car.lateralVel, -20, 20);
 
     if (car.mode === 'road') {
-      car.x += dx;
       const curv = this.track.curvatureAt(car.s);
-      car.x -= curv * car.speed * car.speed * 0.010 * dt * (2 - r.stats.grip);
-      car.lean = THREE.MathUtils.lerp(car.lean, steerIn * -0.13 + curv * 1.3, Math.min(1, 8 * dt));
+      car.lateralVel -= curv * car.speed * car.speed * 1.15 * dt * (2 - r.stats.grip);
+      car.x += car.lateralVel * dt;
+      car.lean = THREE.MathUtils.lerp(
+        car.lean,
+        steerIn * -0.17 - car.lateralVel * 0.012 + curv * 1.3,
+        Math.min(1, 7 * dt),
+      );
+      const cornerLoad = Math.min(0.24, Math.abs(curv) * car.speed * 2.4);
+      car.speed = Math.max(0, car.speed * (1 - cornerLoad * dt)
+        - Math.abs(steerIn) * car.speed * 0.018 * dt);
       if (Math.abs(car.x) > MAX_X) {
         car.x = Math.sign(car.x) * MAX_X;
+        car.lateralVel *= -0.28;
         car.speed *= (1 - 1.7 * dt);
         this.shake = Math.min(1, this.shake + dt * 4);
       }
@@ -470,8 +488,12 @@ export class Race {
       this.tryEnterShortcut(car);
     } else {
       // On the shortcut dirt.
-      car.sx = THREE.MathUtils.clamp((car.sx || 0) + dx, -3.6, 3.6);
-      car.lean = THREE.MathUtils.lerp(car.lean, steerIn * -0.13, Math.min(1, 8 * dt));
+      car.sx = THREE.MathUtils.clamp((car.sx || 0) + car.lateralVel * dt, -3.6, 3.6);
+      car.lean = THREE.MathUtils.lerp(
+        car.lean,
+        steerIn * -0.17 - car.lateralVel * 0.012,
+        Math.min(1, 7 * dt),
+      );
       if (Math.random() < dt * 26) {
         car.worldPos(this.tmpV);
         this.emit(this.dustSys, this.tmpV, { x: 0, z: 0 });
@@ -577,13 +599,23 @@ export class Race {
     else if (Math.random() < dt * 0.06 && curvAhead < 0.01 && car.grounded) {
       car.aiWheelieT = 1.2;
     }
-    const maxSpeed = Math.min(r.topSpeed * (r.aiSkill || 0.9) * rubber * (aiWheelie ? 1.18 : 1), cornerCap);
+    let maxSpeed = Math.min(r.topSpeed * (r.aiSkill || 0.9) * rubber * (aiWheelie ? 1.18 : 1), cornerCap);
+    const relativeToPlayer = car.s - this.player.s;
+    if (!this.demo && relativeToPlayer > 135) {
+      maxSpeed = Math.min(maxSpeed, r.topSpeed * 0.56);
+    } else if (!this.demo && relativeToPlayer < -100) {
+      maxSpeed = Math.max(maxSpeed, r.topSpeed * 1.2);
+    }
     car.speed += THREE.MathUtils.clamp(maxSpeed - car.speed, -42 * dt, r.accel * 0.92 * dt);
     if (car.speed < 0) car.speed = 0;
 
     // Stay in the cruising lane, weave around traffic and each other.
     car.wanderPhase += dt * 0.4;
     let targetX = LANE_PLAYER + Math.sin(car.wanderPhase) * 3.4;
+    if (!this.demo && Math.abs(car.s - this.player.s) < 30) {
+      const passSide = car.gridIndex % 2 ? -1 : 1;
+      targetX = this.player.x + passSide * 5.2;
+    }
     this.traffic.forEach((v) => {
       const ds = v.s - car.s;
       if (ds > 4 && ds < 34 && Math.abs(v.x - car.x) < 3.4) {
@@ -615,6 +647,19 @@ export class Race {
       // Loop the attract drive.
       this.cars.forEach((c, i) => { c.s = 6 - i * 8; c.speed = 20; });
     }
+  }
+
+  updatePassEvents() {
+    if (this.state !== 'race') return;
+    this.cars.forEach((car) => {
+      if (car.isPlayer) return;
+      const ahead = car.s > this.player.s;
+      if (ahead !== car.wasAhead && Math.abs(car.s - this.player.s) < 20
+        && car.racer.rearSprite) {
+        this.onEvent('rivalPass', { racer: car.racer, ahead });
+      }
+      car.wasAhead = ahead;
+    });
   }
 
   // ---------------- traffic ----------------
@@ -699,6 +744,7 @@ export class Race {
             car.crashHold = 0.72;
             car.spinYaw = 0;
             car.speed = 0;
+            car.lateralVel = 0;
             car.wheelieT = 0;
             car.twoWheelT = 0;
             car.twoWheelClean = false;

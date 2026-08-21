@@ -97,6 +97,11 @@ html, body {
   cursor: pointer;
 }
 .big-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #5a0a0a; }
+.big-btn:disabled {
+  cursor: wait;
+  filter: grayscale(0.45) brightness(0.78);
+  animation: none;
+}
 .big-btn.alt { background: linear-gradient(180deg, #4f8fe0, var(--blue) 60%, #082e55); box-shadow: 0 6px 0 #041a31, 0 10px 18px rgba(0,0,0,0.6); }
 .blink { animation: blink 1.1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.35; } }
@@ -272,6 +277,37 @@ html, body {
 }
 #toast.show { opacity: 1; }
 
+#rival-pass {
+  position: absolute;
+  right: max(2vw, env(safe-area-inset-right));
+  top: 18%;
+  width: min(34vw, 290px);
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  padding: 0.5vh 1vw;
+  color: #fff;
+  background: linear-gradient(110deg, rgba(20, 12, 62, 0.94), rgba(125, 24, 112, 0.88));
+  border: 3px solid var(--yellow);
+  border-radius: 12px;
+  box-shadow: 0 6px 0 rgba(30, 4, 40, 0.8);
+  transform: translateX(130%) skewX(-5deg);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.16s ease-out, opacity 0.12s;
+}
+#rival-pass.show { transform: translateX(0) skewX(-5deg); opacity: 1; }
+#rival-pass img {
+  width: 56%;
+  max-height: 86px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+#rival-pass div { display: flex; flex-direction: column; text-align: left; }
+#rival-pass strong { color: var(--yellow); font-size: clamp(12px, 2.6vh, 20px); }
+#rival-pass span { color: #fff; font-size: clamp(8px, 1.7vh, 13px); }
+
 #danger-alert {
   position: absolute;
   top: 27%; left: 50%;
@@ -399,6 +435,21 @@ html, body {
 #btn-mute .slash { display: none; }
 #btn-mute.muted .slash { display: block; }
 #btn-mute.muted .waves { display: none; }
+
+#build-badge {
+  position: fixed;
+  right: max(1.5vw, env(safe-area-inset-right));
+  bottom: max(1vh, env(safe-area-inset-bottom));
+  z-index: 29;
+  padding: 2px 6px;
+  color: rgba(255,255,255,0.7);
+  background: rgba(8, 6, 30, 0.62);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 4px;
+  font-size: clamp(7px, 1.25vh, 10px);
+  letter-spacing: 1px;
+  pointer-events: none;
+}
 
 /* ---------- rotate overlay ---------- */
 #rotate-overlay {

@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=p2p-20260821';
+import * as tex from './tex.js?v=world-pass-2';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -382,9 +382,11 @@ export class Track {
       const f = this.frameAt(s);
       const p = f.pos.clone().addScaledVector(f.left, lm.x);
       const isGate = lm.kind === 'townGate';
+      const hasText = ['townGate', 'dinerSign', 'cantinaNeon'].includes(lm.kind);
       const mat = new THREE.MeshBasicMaterial({
         map: this.landmarkTexture(lm.kind),
-        transparent: true, alphaTest: 0.35, side: THREE.DoubleSide,
+        transparent: true, alphaTest: 0.35,
+        side: hasText ? THREE.FrontSide : THREE.DoubleSide,
         fog: Math.abs(lm.x) < 120 ? true : false,
       });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(lm.w, lm.h), mat);
@@ -410,7 +412,7 @@ export class Track {
     });
     const banner = new THREE.Mesh(
       new THREE.PlaneGeometry(half * 2 + 2, 4.4),
-      new THREE.MeshBasicMaterial({ map: tex.archTexture(label, bg, fg), side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ map: tex.archTexture(label, bg, fg), side: THREE.FrontSide }),
     );
     banner.position.set(f.pos.x, f.pos.y + 11.6, f.pos.z);
     banner.rotation.y = this.headingAt(s) + Math.PI;
@@ -559,7 +561,7 @@ export class Track {
       new THREE.PlaneGeometry(19, 10),
       new THREE.MeshBasicMaterial({
         map: tex.archTexture(`${sc.label || 'SHORTCUT'} >`, '#7c3fa0', '#ffd23d'),
-        transparent: true, side: THREE.DoubleSide,
+        transparent: true, side: THREE.FrontSide,
       }),
     );
     const sp = this.worldPos(s1 - 58, side * (ROAD_HALF + 7));
@@ -573,7 +575,7 @@ export class Track {
       const marker = new THREE.Mesh(
         new THREE.PlaneGeometry(8, 4.5),
         new THREE.MeshBasicMaterial({
-          map: arrowMap, transparent: true, side: THREE.DoubleSide,
+          map: arrowMap, transparent: true, side: THREE.FrontSide,
         }),
       );
       const mp = this.worldPos(markerS, side * (ROAD_HALF + 2.5));

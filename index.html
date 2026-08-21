@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
 <title>CRUIS'N BEANS — 90s Arcade Parody Racer</title>
-<link rel="stylesheet" href="css/style.css?v=p2p-20260821">
+<link rel="stylesheet" href="css/style.css?v=world-pass-2">
 <link rel="icon" href="assets/img/elon-portrait.png">
 </head>
 <body>
@@ -21,7 +24,7 @@
     <div class="logo-main">BEANS</div>
     <div class="logo-sub">THE MUSICAL FRUIT GRAND PRIX</div>
   </div>
-  <button id="btn-start" class="big-btn blink">PRESS START</button>
+  <button id="btn-start" class="big-btn blink" disabled>LOADING DRIVERS...</button>
   <div class="title-foot">A LOVING 90s ARCADE PARODY &bull; NO QUARTERS NEEDED<br>
   NOT AFFILIATED WITH ANY REAL RACE, CAR, OR BEAN</div>
 </div>
@@ -54,6 +57,10 @@
   <div id="danger-alert">WRONG WAY TRUCK!<small>DOUBLE-TAP GAS — WHEELIE IT!</small></div>
   <div id="countdown"></div>
   <div id="toast"></div>
+  <div id="rival-pass">
+    <img id="rival-pass-car" alt="">
+    <div><strong id="rival-pass-name"></strong><span id="rival-pass-copy"></span></div>
+  </div>
   <div id="hint">AUTO&nbsp;GAS!&nbsp;&nbsp;DRAG&nbsp;TO&nbsp;STEER!<br><b>DOUBLE-TAP GAS</b> = WHEELIE TURBO!<br><small>WHEELIE OVER TRAFFIC &bull; FLIP OFF RAMPS</small></div>
   <button id="btn-brake" class="pedal">BRAKE</button>
   <button id="btn-gas" class="pedal">GAS<small>2-TAP =<br>WHEELIE</small></button>
@@ -78,6 +85,8 @@
   </svg>
 </button>
 
+<div id="build-badge">P2P BUILD 2</div>
+
 <div id="rotate-overlay">
   <div class="rotate-card">
     <div class="rotate-icon">&#8634;</div>
@@ -85,6 +94,6 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js?v=p2p-20260821"></script>
+<script type="module" src="js/main.js?v=world-pass-2"></script>
 </body>
 </html>

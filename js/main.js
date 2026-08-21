@@ -1,10 +1,10 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=p2p-20260821';
-import { Race } from './game.js?v=p2p-20260821';
-import { Input } from './input.js?v=p2p-20260821';
-import { audio } from './audio.js?v=p2p-20260821';
-import { rivalRearTexture } from './tex.js?v=p2p-20260821';
+import { RACERS, RIVALS, STAGES } from './data.js?v=world-pass-2';
+import { Race } from './game.js?v=world-pass-2';
+import { Input } from './input.js?v=world-pass-2';
+import { audio } from './audio.js?v=world-pass-2';
+import { rivalRearTexture } from './tex.js?v=world-pass-2';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -30,6 +30,7 @@ let fpsT = 0;
 let hintShown = false;
 let musicStarted = false;
 let lastClockBeep = -1;
+let passTimer = 0;
 
 // Rival portraits are generated from their canvas car sprites.
 const rivalPortraits = new Map();
@@ -71,8 +72,34 @@ function startDemo() {
   race.camera.updateProjectionMatrix();
 }
 
+// ---------- asset gate ----------
+// Racer cards used to paint their purple backing before the large PNGs
+// arrived. Do not let the first select screen open until every portrait and
+// car angle has decoded at least once.
+const startBtn = $('#btn-start');
+const artUrls = [...new Set(RACERS.flatMap((racer) => [
+  racer.portrait, racer.carSprite, racer.rearSprite, racer.frontSprite,
+]))];
+
+function loadArt(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = async () => {
+      try { await image.decode(); } catch (error) { /* already loaded */ }
+      resolve(true);
+    };
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
+}
+
+Promise.all(artUrls.map(loadArt)).then((loaded) => {
+  startBtn.disabled = false;
+  startBtn.textContent = loaded.every(Boolean) ? 'PRESS START' : 'PRESS START — ART RETRYING';
+});
+
 // ---------- title ----------
-$('#btn-start').addEventListener('click', () => {
+startBtn.addEventListener('click', () => {
   audio.resume();
   buildRacerCards();
   show('racer');
@@ -140,6 +167,18 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
 }
 
+function showRivalPass(data) {
+  if (!data || !data.racer || !data.racer.rearSprite) return;
+  const card = $('#rival-pass');
+  $('#rival-pass-car').src = data.racer.rearSprite;
+  $('#rival-pass-car').alt = data.racer.name;
+  $('#rival-pass-name').textContent = data.racer.name;
+  $('#rival-pass-copy').textContent = data.ahead ? ' BLOWS BY!' : ' IN YOUR MIRROR!';
+  card.classList.add('show');
+  clearTimeout(passTimer);
+  passTimer = setTimeout(() => card.classList.remove('show'), 1300);
+}
+
 const countEl = $('#countdown');
 function showCount(txt, cls) {
   countEl.textContent = txt;
@@ -191,6 +230,8 @@ function onRaceEvent(kind, data) {
     $('#hint').classList.remove('show');
   } else if (kind === 'toast') {
     toast(data);
+  } else if (kind === 'rivalPass') {
+    showRivalPass(data);
   } else if (kind === 'finish') {
     setTimeout(() => showResults(data), 900);
   }
