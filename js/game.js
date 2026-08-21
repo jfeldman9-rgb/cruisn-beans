@@ -543,7 +543,7 @@ export class Race {
       car.ss = 0;
       car.sx = 0;
       audio.checkpoint();
-      this.onEvent('toast', 'SHORTCUT!');
+      this.onEvent('toast', `SHORTCUT! CUT ${Math.round(sc.savedDistance)}m`);
     }
   }
 

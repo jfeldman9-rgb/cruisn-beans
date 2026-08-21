@@ -192,7 +192,7 @@ html, body {
 
 #hud-location {
   position: absolute;
-  top: calc(max(1vh, env(safe-area-inset-top)) + 14px);
+  top: max(10vh, 56px);
   left: 50%;
   transform: translateX(-50%);
   color: #fff;

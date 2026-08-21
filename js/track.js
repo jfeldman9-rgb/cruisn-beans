@@ -505,15 +505,19 @@ export class Track {
     const side = sc.side; // +1 = right of the road
     const f1 = this.frameAt(s1);
     const f2 = this.frameAt(s2);
-    // Cut across the inside of the bend with a couple of waypoints.
-    const mid1 = this.worldPos(s1 + (s2 - s1) * 0.3, side * 90);
-    const mid2 = this.worldPos(s1 + (s2 - s1) * 0.7, side * 90);
+    // Cut the chord across the bend. The previous version sampled the main
+    // road for its middle points, accidentally making the "shortcut" longer
+    // than the route it bypassed on Desert Highway.
+    const start = this.worldPos(s1, side * (ROAD_HALF - 2));
+    const end = this.worldPos(s2, side * (ROAD_HALF - 4));
+    const mid1 = start.clone().lerp(end, 0.32).addScaledVector(f1.left, side * 24);
+    const mid2 = start.clone().lerp(end, 0.68).addScaledVector(f2.left, side * 24);
     const pts = [
-      this.worldPos(s1, side * (ROAD_HALF - 2)),
-      this.worldPos(s1 + 30, side * (ROAD_HALF + SHOULDER + 14)),
+      start,
+      start.clone().lerp(mid1, 0.38),
       mid1, mid2,
-      this.worldPos(s2 - 30, side * (ROAD_HALF + SHOULDER + 14)),
-      this.worldPos(s2, side * (ROAD_HALF - 4)),
+      mid2.clone().lerp(end, 0.62),
+      end,
     ];
     const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.4);
     const len = curve.getLength();
@@ -580,6 +584,7 @@ export class Track {
 
     this.shortcut = {
       s1, s2, side, curve, len, frames,
+      savedDistance: Math.max(0, (s2 - s1) - len),
       frameAt: (ss) => {
         const c = THREE.MathUtils.clamp(ss, 0, len - 0.01);
         const fi = (c / len) * n;
