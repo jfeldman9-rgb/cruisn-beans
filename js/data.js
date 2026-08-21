@@ -116,7 +116,7 @@ export const STAGES = [
       { kind: 'cruiseShip', at: 0.28, x: 200, w: 260, h: 80 },
       { kind: 'cruiseShip', at: 0.06, x: 260, w: 220, h: 70 },
     ],
-    shortcut: { enter: 0.545, exit: 0.665, side: 1, label: 'JUNGLE CUT' },
+    shortcut: { enter: 0.52, exit: 0.70, side: 1, label: 'JUNGLE CUT' },
     ramps: [0.18, 0.46, 0.84],
     beans: [0.1, 0.3, 0.52, 0.7, 0.9],
     animals: [
@@ -161,7 +161,7 @@ export const STAGES = [
       { kind: 'mesaBig', at: 0.8, x: -350, w: 500, h: 200 },
       { kind: 'dinerSign', at: 0.35, x: 30, w: 26, h: 40 },
     ],
-    shortcut: { enter: 0.28, exit: 0.42, side: -1, label: 'DRY RIVERBED' },
+    shortcut: { enter: 0.29, exit: 0.50, side: -1, label: 'DRY RIVERBED' },
     ramps: [0.22, 0.5, 0.78],
     beans: [0.12, 0.33, 0.55, 0.75, 0.93],
     animals: [
@@ -211,7 +211,7 @@ export const STAGES = [
       { kind: 'fountain', at: 0.63, x: -22, w: 22, h: 14 },
       { kind: 'cantinaNeon', at: 0.985, x: 26, w: 60, h: 46 },
     ],
-    shortcut: { enter: 0.685, exit: 0.83, side: 1, label: 'ALLEY CUT' },
+    shortcut: { enter: 0.64, exit: 0.86, side: 1, label: 'ALLEY CUT' },
     ramps: [0.3, 0.75],
     beans: [0.14, 0.36, 0.58, 0.8],
     animals: [
