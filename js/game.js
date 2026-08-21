@@ -7,7 +7,7 @@ import * as tex from './tex.js';
 import { audio } from './audio.js';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
-const WHEELIE_TIME = 1.45;
+const WHEELIE_TIME = 1.9;
 const TWOWHEEL_TIME = 1.05;
 
 const texLoader = new THREE.TextureLoader();
@@ -649,7 +649,7 @@ export class Race {
       const ds = v.s - anchor;
       const closingSpeed = Math.max(1, this.player.speed + v.speed);
       const secondsToImpact = ds / closingSpeed;
-      if (v.wrongWay && ds > 18 && secondsToImpact < 1.45
+      if (v.wrongWay && ds > 18 && secondsToImpact < 1.8
         && this.player.speed > 12 && Math.abs(v.x - this.player.x) < 5.2) {
         danger = true;
       }
