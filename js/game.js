@@ -650,7 +650,7 @@ export class Race {
       const closingSpeed = Math.max(1, this.player.speed + v.speed);
       const secondsToImpact = ds / closingSpeed;
       if (v.wrongWay && ds > 18 && secondsToImpact < 1.8
-        && this.player.speed > 12 && Math.abs(v.x - this.player.x) < 5.2) {
+        && this.player.speed > 12) {
         danger = true;
       }
     });
