@@ -369,7 +369,7 @@ export class Race {
         car.flipAxis = 'x';
         audio.whoosh();
       } else if (car.grounded && car.wheelieT <= 0 && car.wheelieCooldown <= 0
-        && car.spinT <= 0 && car.speed > 16 && this.state === 'race') {
+        && car.spinT <= 0 && car.speed > 12 && this.state === 'race') {
         // WHEELIE: the World-style double-tap turbo.
         car.wheelieFullT = WHEELIE_TIME * (0.8 + r.stats.wheelie * 0.4);
         car.wheelieT = car.wheelieFullT;
@@ -647,7 +647,10 @@ export class Race {
         v.group.position.copy(this.tmpV);
       }
       const ds = v.s - anchor;
-      if (v.wrongWay && ds > 18 && ds < 220 && Math.abs(v.x - this.player.x) < 5.2) {
+      const closingSpeed = Math.max(1, this.player.speed + v.speed);
+      const secondsToImpact = ds / closingSpeed;
+      if (v.wrongWay && ds > 18 && secondsToImpact < 1.45
+        && this.player.speed > 12 && Math.abs(v.x - this.player.x) < 5.2) {
         danger = true;
       }
     });
