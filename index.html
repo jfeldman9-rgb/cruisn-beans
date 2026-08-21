@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+<title>CRUIS'N BEANS — 90s Arcade Parody Racer</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="assets/img/elon-portrait.png">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="steer-surface"></div>
+
+<!-- TITLE -->
+<div id="screen-title" class="screen">
+  <div class="title-logo">
+    <div class="logo-top">CRUIS'N</div>
+    <div class="logo-main">BEANS</div>
+    <div class="logo-sub">THE MUSICAL FRUIT GRAND PRIX</div>
+  </div>
+  <button id="btn-start" class="big-btn blink">PRESS START</button>
+  <div class="title-foot">A LOVING 90s ARCADE PARODY &bull; NO QUARTERS NEEDED<br>
+  NOT AFFILIATED WITH ANY REAL RACE, CAR, OR BEAN</div>
+</div>
+
+<!-- RACER SELECT -->
+<div id="screen-racer" class="screen">
+  <div class="screen-head">CHOOSE YOUR CRUISER</div>
+  <div id="racer-cards" class="cards"></div>
+  <button id="btn-racer-back" class="back-btn">&#9664; BACK</button>
+</div>
+
+<!-- TRACK SELECT -->
+<div id="screen-track" class="screen">
+  <div class="screen-head">CHOOSE YOUR CRUISE</div>
+  <div id="track-cards" class="cards tracks"></div>
+  <button id="btn-track-back" class="back-btn">&#9664; BACK</button>
+</div>
+
+<!-- RACE HUD -->
+<div id="screen-hud" class="screen transparent">
+  <div id="hud-top">
+    <div class="hud-box"><label>TIME</label><span id="hud-time">60</span></div>
+    <div class="hud-box"><span id="hud-lap">LAP 1/3</span></div>
+    <div class="hud-box pos"><span id="hud-pos">4th</span></div>
+  </div>
+  <div id="hud-mph">0 MPH</div>
+  <div id="countdown"></div>
+  <div id="toast"></div>
+  <div id="hint">AUTO&nbsp;GAS!&nbsp;&nbsp;DRAG&nbsp;TO&nbsp;STEER!<br>HOLD <b>FART</b> TO&nbsp;TURBO&nbsp;(EAT&nbsp;BEANS!)</div>
+  <button id="btn-brake" class="pedal">BRAKE</button>
+  <div id="fart-stack">
+    <div id="bean-meter"></div>
+    <button id="btn-fart" class="pedal">FART!</button>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="screen-results" class="screen">
+  <div id="results-title">1st PLACE!</div>
+  <div id="results-sub"></div>
+  <div id="results-list"></div>
+  <div class="results-btns">
+    <button id="btn-retry" class="big-btn">RETRY</button>
+    <button id="btn-title" class="big-btn alt">TITLE</button>
+  </div>
+</div>
+
+<button id="btn-mute" aria-label="Mute">
+  <svg viewBox="0 0 24 24" width="26" height="26">
+    <polygon points="3,9 8,9 13,4 13,20 8,15 3,15" fill="currentColor"/>
+    <path class="waves" d="M16 8 Q19 12 16 16 M18 5.5 Q23 12 18 18.5" stroke="currentColor" stroke-width="2" fill="none"/>
+    <line class="slash" x1="3" y1="21" x2="21" y2="3" stroke="#ff3355" stroke-width="3"/>
+  </svg>
+</button>
+
+<div id="rotate-overlay">
+  <div class="rotate-card">
+    <div class="rotate-icon">&#8634;</div>
+    ROTATE YOUR PHONE<br><small>THIS CABINET IS WIDESCREEN</small>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
