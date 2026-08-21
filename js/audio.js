@@ -69,6 +69,75 @@ class AudioBox {
     [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.beep(f, 0.1, 'sawtooth', 0.18), i * 60));
   }
 
+  honk() {
+    // Two-tone truck horn.
+    this.beep(310, 0.28, 'sawtooth', 0.22);
+    this.beep(392, 0.28, 'sawtooth', 0.22);
+  }
+
+  wheelie() {
+    // Rising rev.
+    if (!this.ensure()) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(420, t + 0.5);
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    o.connect(g).connect(this.master);
+    o.start(t); o.stop(t + 0.6);
+  }
+
+  whoosh() {
+    if (!this.ensure()) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer(0.4);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(600, t);
+    f.frequency.exponentialRampToValueAtTime(2400, t + 0.3);
+    f.Q.value = 2;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t);
+  }
+
+  animal(kind) {
+    if (!this.ensure()) return;
+    const t = this.ctx.currentTime;
+    if (kind === 'moo' || kind === 'heehaw') {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sawtooth';
+      if (kind === 'moo') {
+        o.frequency.setValueAtTime(180, t);
+        o.frequency.exponentialRampToValueAtTime(95, t + 0.55);
+      } else {
+        o.frequency.setValueAtTime(330, t);
+        o.frequency.setValueAtTime(190, t + 0.18);
+        o.frequency.setValueAtTime(330, t + 0.36);
+        o.frequency.setValueAtTime(190, t + 0.5);
+      }
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 900;
+      g.gain.setValueAtTime(0.3, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      o.connect(f).connect(g).connect(this.master);
+      o.start(t); o.stop(t + 0.65);
+    } else if (kind === 'squeal' || kind === 'cluck' || kind === 'squawk') {
+      [900, 1300, 1100].forEach((fq, i) => {
+        setTimeout(() => this.beep(fq + Math.random() * 200, 0.08, 'square', 0.2), i * 80);
+      });
+    } else {
+      this.crash();
+    }
+  }
+
   crash() {
     if (!this.ensure()) return;
     const t = this.ctx.currentTime;

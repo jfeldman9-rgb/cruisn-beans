@@ -170,8 +170,40 @@ html, body {
 #hud-top {
   position: absolute; top: max(1vh, env(safe-area-inset-top));
   left: 0; right: 0;
-  display: flex; justify-content: center; gap: 2.4vw;
+  display: flex; justify-content: center; align-items: flex-start; gap: 2.4vw;
   pointer-events: none;
+}
+.hud-box.time { font-size: clamp(20px, 5vh, 38px); border-color: var(--red); }
+
+#hud-progress {
+  position: absolute; top: max(1vh, env(safe-area-inset-top));
+  left: max(2vw, env(safe-area-inset-left));
+  width: 20vw; height: 10px;
+  background: rgba(8, 6, 30, 0.72);
+  border: 2px solid var(--yellow);
+  border-radius: 6px;
+  pointer-events: none;
+}
+#hud-progress-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--green), var(--yellow));
+  border-radius: 4px;
+}
+
+#hud-beans-box {
+  position: absolute; top: calc(max(1vh, env(safe-area-inset-top)) + 18px);
+  left: max(2vw, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: 5px;
+  color: #fff; font-size: clamp(11px, 2.4vh, 17px);
+  text-shadow: 0 2px 0 #000;
+  pointer-events: none;
+}
+.bean-ico {
+  width: clamp(10px, 2vh, 15px); height: clamp(14px, 2.8vh, 21px);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: radial-gradient(circle at 35% 30%, #b7ff8f, var(--green) 60%, #14701f);
+  border: 1px solid #d6ffb0;
+  display: inline-block;
 }
 .hud-box {
   background: rgba(8, 6, 30, 0.72);
@@ -261,40 +293,19 @@ html, body {
   left: max(2vw, env(safe-area-inset-left));
   background: radial-gradient(circle at 35% 30%, #ff8d6b, var(--red) 55%, #7c0d12);
 }
-#fart-stack {
-  position: absolute;
+#btn-gas {
   right: max(2vw, env(safe-area-inset-right));
-  bottom: max(2vh, env(safe-area-inset-bottom));
-  display: flex; flex-direction: column; align-items: center; gap: 1vh;
-  pointer-events: auto;
-}
-#btn-fart {
-  position: static;
+  width: clamp(96px, 20vh, 150px);
+  height: clamp(96px, 20vh, 150px);
   background: radial-gradient(circle at 35% 30%, #9dff7a, var(--green) 55%, #0b5c18);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  line-height: 1.1;
 }
-#btn-fart.active { filter: brightness(1.35); transform: scale(1.06); }
-#btn-fart.empty { filter: grayscale(0.8) brightness(0.7); }
-#btn-brake:active, #btn-fart:active { transform: translateY(3px); }
-
-#bean-meter {
-  display: flex; gap: 3px;
-  background: rgba(8, 6, 30, 0.72);
-  border: 2px solid var(--green);
-  border-radius: 8px;
-  padding: 4px 6px;
+#btn-gas small {
+  font-size: 0.5em; color: #eaffd9; letter-spacing: 0; line-height: 1.2;
 }
-#bean-meter span {
-  width: clamp(8px, 1.6vh, 13px);
-  height: clamp(12px, 2.4vh, 19px);
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  background: #1c1636;
-  border: 1px solid #3d3370;
-}
-#bean-meter span.full {
-  background: radial-gradient(circle at 35% 30%, #b7ff8f, var(--green) 60%, #14701f);
-  border-color: #d6ffb0;
-  box-shadow: 0 0 6px rgba(47, 174, 63, 0.9);
-}
+#btn-gas.active { filter: brightness(1.4); transform: scale(1.07); }
+#btn-brake:active, #btn-gas:active { transform: translateY(3px); }
 
 /* ---------- results ---------- */
 #results-title {

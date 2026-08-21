@@ -1,9 +1,10 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, TRACKS } from './data.js';
+import { RACERS, RIVALS, STAGES } from './data.js';
 import { Race } from './game.js';
 import { Input } from './input.js';
 import { audio } from './audio.js';
+import { rivalRearTexture } from './tex.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -15,19 +16,28 @@ renderer.setPixelRatio(1);
 
 const input = new Input();
 input.bindSteerSurface($('#steer-surface'));
-input.bindHoldButton($('#btn-fart'), 'fart');
 input.bindHoldButton($('#btn-brake'), 'brake');
+input.bindGasPad($('#btn-gas'));
 
 let renderScale = 0.72;
-let race = null;          // current Race (demo or real)
-let mode = 'title';       // title | racer | track | race | results
+let race = null;
+let mode = 'title';
 let chosenRacer = 0;
-let chosenTrack = 0;
+let chosenStage = 0;
 let fpsAcc = 0;
 let fpsN = 0;
 let fpsT = 0;
 let hintShown = false;
 let musicStarted = false;
+
+// Rival portraits are generated from their canvas car sprites.
+const rivalPortraits = new Map();
+function rivalPortrait(rival) {
+  if (!rivalPortraits.has(rival.id)) {
+    rivalPortraits.set(rival.id, rivalRearTexture(rival.color).image.toDataURL());
+  }
+  return rivalPortraits.get(rival.id);
+}
 
 function resize() {
   const w = window.innerWidth;
@@ -47,10 +57,15 @@ function show(name) {
   mode = name;
 }
 
+function packFor(playerIdx) {
+  const order = [playerIdx, ...RACERS.map((_, i) => i).filter((i) => i !== playerIdx)];
+  return [...order.map((i) => RACERS[i]), ...RIVALS];
+}
+
 function startDemo() {
   if (race) race.dispose();
-  const def = TRACKS[(Math.random() * TRACKS.length) | 0];
-  race = new Race({ trackDef: def, racers: RACERS, playerIndex: 0, demo: true, onEvent: () => {} });
+  const def = STAGES[(Math.random() * STAGES.length) | 0];
+  race = new Race({ trackDef: def, racers: packFor(0), playerIndex: 0, demo: true, onEvent: () => {} });
   race.camera.aspect = window.innerWidth / window.innerHeight;
   race.camera.updateProjectionMatrix();
 }
@@ -78,13 +93,13 @@ function buildRacerCards() {
       <div class="card-stats">
         <div><span>SPD</span><i style="width:${r.stats.speed * 100}%"></i></div>
         <div><span>GRP</span><i style="width:${r.stats.grip * 100}%"></i></div>
-        <div><span>BNS</span><i style="width:${r.stats.beans * 100}%"></i></div>
+        <div><span>WHL</span><i style="width:${r.stats.wheelie * 100}%"></i></div>
       </div>
       <div class="card-tag">${r.tagline}</div>`;
     card.addEventListener('click', () => {
       chosenRacer = i;
       audio.beep(880, 0.12, 'square', 0.25);
-      buildTrackCards();
+      buildStageCards();
       show('track');
     });
     wrap.appendChild(card);
@@ -92,20 +107,20 @@ function buildRacerCards() {
 }
 $('#btn-racer-back').addEventListener('click', () => show('title'));
 
-// ---------- track select ----------
-function buildTrackCards() {
+// ---------- stage select ----------
+function buildStageCards() {
   const wrap = $('#track-cards');
   if (wrap.childElementCount) return;
-  TRACKS.forEach((t, i) => {
+  STAGES.forEach((t, i) => {
     const card = document.createElement('button');
     card.className = `card track-card track-${t.id}`;
     card.innerHTML = `
       <div class="card-name">${t.name}</div>
       <div class="track-art track-art-${t.id}"></div>
       <div class="card-tag">${t.blurb}</div>
-      <div class="card-tag small">${t.laps} LAPS \u2022 ~3 MIN</div>`;
+      <div class="card-tag small">POINT TO POINT \u2022 BEAT THE CLOCK</div>`;
     card.addEventListener('click', () => {
-      chosenTrack = i;
+      chosenStage = i;
       audio.beep(880, 0.12, 'square', 0.25);
       startRace();
     });
@@ -121,7 +136,7 @@ function toast(msg) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1600);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
 }
 
 const countEl = $('#countdown');
@@ -134,29 +149,30 @@ function showCount(txt, cls) {
 function startRace() {
   if (race) race.dispose();
   audio.stopMusic();
-  const order = [chosenRacer, ...RACERS.map((_, i) => i).filter((i) => i !== chosenRacer)];
-  const racers = order.map((i) => RACERS[i]);
-  // ?laps=1 shortens races (handy for testing).
-  const lapsOverride = parseInt(new URLSearchParams(location.search).get('laps'), 10);
-  const trackDef = lapsOverride > 0
-    ? { ...TRACKS[chosenTrack], laps: lapsOverride }
-    : TRACKS[chosenTrack];
+  // ?time=N overrides the starting clock (testing). ?short=1 starts near the end.
+  const params = new URLSearchParams(location.search);
+  const trackDef = { ...STAGES[chosenStage] };
+  const timeOverride = parseFloat(params.get('time'));
+  if (timeOverride > 0) trackDef.startTime = timeOverride;
   race = new Race({
     trackDef,
-    racers,
+    racers: packFor(chosenRacer),
     playerIndex: 0,
     onEvent: onRaceEvent,
   });
+  if (params.get('short') === '1') {
+    race.cars.forEach((c, i) => { c.s = race.track.length - 900 - i * 10; });
+    race.nextCheckpoint = race.track.checkpoints.filter((s) => s < race.player.s).length;
+  }
   race.camera.aspect = window.innerWidth / window.innerHeight;
   race.camera.updateProjectionMatrix();
   show('race');
   audio.startEngine();
 
-  // Fat first-race hint.
   if (!hintShown) {
     hintShown = true;
     $('#hint').classList.add('show');
-    setTimeout(() => $('#hint').classList.remove('show'), 6000);
+    setTimeout(() => $('#hint').classList.remove('show'), 7000);
   }
 
   setTimeout(() => race && race.startCountdown(), 800);
@@ -178,7 +194,6 @@ function onRaceEvent(kind, data) {
   }
 }
 
-// Dismiss hint on first input.
 input.onFirstInput = () => $('#hint').classList.remove('show');
 
 // ---------- results ----------
@@ -187,7 +202,7 @@ function fmtTime(t) {
   const s = t - m * 60;
   return `${m}:${s.toFixed(1).padStart(4, '0')}`;
 }
-const PLACE_NAMES = ['1st', '2nd', '3rd', '4th'];
+const PLACE_NAMES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 
 function showResults(data) {
   audio.stopEngine();
@@ -201,18 +216,19 @@ function showResults(data) {
     title.className = data.place === 1 ? 'win' : '';
   }
   $('#results-sub').textContent = data.timeUp
-    ? 'THE BEANS WEREN\u2019T ENOUGH...'
-    : `TIME ${fmtTime(data.raceTime)}  \u2022  BEANS USED ${data.beansUsed}`;
+    ? 'THE ROAD WON THIS TIME...'
+    : `TIME ${fmtTime(data.raceTime)} \u2022 STUNTS ${data.stunts} \u2022 BEANS ${data.beans}`;
   const list = $('#results-list');
   list.innerHTML = '';
   data.results.forEach((r, i) => {
     const row = document.createElement('div');
     row.className = `result-row ${r.isPlayer ? 'me' : ''}`;
+    const img = r.racer.portrait || rivalPortrait(r.racer);
     row.innerHTML = `
       <span class="rpos">${PLACE_NAMES[i]}</span>
-      <img src="${r.racer.portrait}" alt="${r.racer.name}">
+      <img src="${img}" alt="${r.racer.name}">
       <span class="rname">${r.racer.name}</span>
-      <span class="rtime">${r.finished || !data.timeUp ? fmtTime(r.time) : 'DNF'}</span>`;
+      <span class="rtime">${r.finished ? fmtTime(r.time) : (data.timeUp && r.isPlayer ? 'DNF' : fmtTime(r.time))}</span>`;
     list.appendChild(row);
   });
   show('results');
@@ -244,7 +260,6 @@ window.addEventListener('keydown', (e) => {
 });
 paintMute();
 
-// Unlock audio + start title music on first gesture.
 function firstGesture() {
   audio.resume();
   if (!musicStarted && mode === 'title') {
@@ -259,29 +274,22 @@ window.addEventListener('keydown', firstGesture);
 
 // ---------- HUD ----------
 const hudTime = $('#hud-time');
-const hudLap = $('#hud-lap');
+const hudCp = $('#hud-cp');
 const hudPos = $('#hud-pos');
 const hudMph = $('#hud-mph');
-const beanCells = [];
-(() => {
-  const meter = $('#bean-meter');
-  for (let i = 0; i < 8; i++) {
-    const b = document.createElement('span');
-    meter.appendChild(b);
-    beanCells.push(b);
-  }
-})();
+const hudBeans = $('#hud-beans');
+const hudProgress = $('#hud-progress-fill');
 
 function paintHUD() {
   const h = race.hud();
   hudTime.textContent = Math.ceil(h.timeLeft);
-  hudTime.classList.toggle('low', h.timeLeft < 10);
-  hudLap.textContent = `LAP ${h.lap}/${h.laps}`;
-  hudPos.textContent = PLACE_NAMES[h.place - 1];
+  hudTime.classList.toggle('low', h.timeLeft < 8);
+  hudCp.textContent = `CP ${h.cp}/${h.cps}`;
+  hudPos.textContent = `${PLACE_NAMES[h.place - 1]}/${h.total}`;
   hudMph.textContent = `${h.mph} MPH`;
-  beanCells.forEach((b, i) => b.classList.toggle('full', i < h.beans));
-  $('#btn-fart').classList.toggle('active', h.turbo);
-  $('#btn-fart').classList.toggle('empty', h.beans === 0);
+  hudBeans.textContent = `\u00d7${h.beans}`;
+  hudProgress.style.width = `${(h.progress * 100).toFixed(1)}%`;
+  $('#btn-gas').classList.toggle('active', h.wheelie);
 }
 
 // ---------- main loop ----------
@@ -291,7 +299,6 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  // Adaptive resolution for steady 60 fps on phones.
   fpsAcc += dt; fpsN++; fpsT += dt;
   if (fpsT > 2 && fpsN > 10) {
     const avg = fpsN / fpsAcc;

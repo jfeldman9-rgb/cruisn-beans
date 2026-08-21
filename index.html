@@ -43,19 +43,18 @@
 <!-- RACE HUD -->
 <div id="screen-hud" class="screen transparent">
   <div id="hud-top">
-    <div class="hud-box"><label>TIME</label><span id="hud-time">60</span></div>
-    <div class="hud-box"><span id="hud-lap">LAP 1/3</span></div>
-    <div class="hud-box pos"><span id="hud-pos">4th</span></div>
+    <div class="hud-box"><span id="hud-cp">CP 0/6</span></div>
+    <div class="hud-box time"><label>TIME</label><span id="hud-time">45</span></div>
+    <div class="hud-box pos"><span id="hud-pos">7th/7</span></div>
   </div>
+  <div id="hud-progress"><div id="hud-progress-fill"></div></div>
+  <div id="hud-beans-box"><span class="bean-ico"></span><span id="hud-beans">&times;0</span></div>
   <div id="hud-mph">0 MPH</div>
   <div id="countdown"></div>
   <div id="toast"></div>
-  <div id="hint">AUTO&nbsp;GAS!&nbsp;&nbsp;DRAG&nbsp;TO&nbsp;STEER!<br>HOLD <b>FART</b> TO&nbsp;TURBO&nbsp;(EAT&nbsp;BEANS!)</div>
+  <div id="hint">AUTO&nbsp;GAS!&nbsp;&nbsp;DRAG&nbsp;TO&nbsp;STEER!<br><b>DOUBLE-TAP GAS</b> = WHEELIE TURBO!<br><small>WHEELIE OVER TRAFFIC &bull; FLIP OFF RAMPS</small></div>
   <button id="btn-brake" class="pedal">BRAKE</button>
-  <div id="fart-stack">
-    <div id="bean-meter"></div>
-    <button id="btn-fart" class="pedal">FART!</button>
-  </div>
+  <button id="btn-gas" class="pedal">GAS<small>2-TAP =<br>WHEELIE</small></button>
 </div>
 
 <!-- RESULTS -->
