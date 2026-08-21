@@ -182,7 +182,8 @@ export class Race {
     this.scene.add(this.track.group);
     // Long draw distance: haze starts far out, landmarks ignore fog entirely.
     this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, 260, 1150);
-    this.camera = new THREE.PerspectiveCamera(71, 16 / 9, 0.5, 6000);
+    this.scene.background = new THREE.Color(opts.trackDef.sky[0]);
+    this.camera = new THREE.PerspectiveCamera(71, 16 / 9, 0.5, 9000);
 
     this.cars = opts.racers.map((r, i) => {
       const car = new PackCar(r, this.track, !this.demo && i === opts.playerIndex, i);

@@ -208,7 +208,7 @@ export class Track {
     const groundT = tex.groundTexture(this.def.ground, this.def.groundDetail);
     groundT.repeat.set(160, 160);
     const g = new THREE.Mesh(
-      new THREE.PlaneGeometry(12000, 12000),
+      new THREE.PlaneGeometry(7800, 7800),
       new THREE.MeshBasicMaterial({ map: groundT }),
     );
     g.rotation.x = -Math.PI / 2;
@@ -218,12 +218,22 @@ export class Track {
     g.position.x = mid.x; g.position.z = mid.z;
     this.group.add(g);
 
+    // Sky: gradient cylinder blending into the fog color at the horizon,
+    // plus a top cap disc so looking up never shows the void.
+    const skyColors = [this.def.sky[0], this.def.sky[1], this.def.fogColor];
     const sky = new THREE.Mesh(
-      new THREE.CylinderGeometry(5200, 5200, 2600, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: tex.skyTexture(this.def.sky), side: THREE.BackSide, fog: false }),
+      new THREE.CylinderGeometry(5600, 5600, 4200, 24, 1, true),
+      new THREE.MeshBasicMaterial({ map: tex.skyTexture(skyColors), side: THREE.BackSide, fog: false }),
     );
-    sky.position.set(mid.x, 500, mid.z);
+    sky.position.set(mid.x, 1300, mid.z);
     this.group.add(sky);
+    const cap = new THREE.Mesh(
+      new THREE.CircleGeometry(5700, 24),
+      new THREE.MeshBasicMaterial({ color: this.def.sky[0], side: THREE.DoubleSide, fog: false }),
+    );
+    cap.rotation.x = Math.PI / 2;
+    cap.position.set(mid.x, 3350, mid.z);
+    this.group.add(cap);
 
     const sun = new THREE.Sprite(new THREE.SpriteMaterial({
       map: tex.sunTexture(this.def.id === 'desert' ? '#ffd06b' : '#fff3b0'),
