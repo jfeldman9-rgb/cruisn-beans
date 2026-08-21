@@ -674,7 +674,8 @@ export class Race {
       // LEAPFROG: an active wheelie near an oncoming vehicle launches you
       // over it — generous window so the move is landable at closing speed.
       if (isPlayer && car.wheelieT > 0 && car.grounded && v.oncoming
-        && v.clearedBy !== car && ds > -2 && ds < 26 && Math.abs(v.x - car.x) < 3.4) {
+        && v.clearedBy !== car && ds > -2 && ds < 26
+        && Math.abs(v.x - car.x) < (v.wrongWay ? 5.4 : 3.4)) {
         v.clearedBy = car;
         car.grounded = false;
         car.vy = 15;
