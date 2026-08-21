@@ -136,8 +136,13 @@ function startRace() {
   audio.stopMusic();
   const order = [chosenRacer, ...RACERS.map((_, i) => i).filter((i) => i !== chosenRacer)];
   const racers = order.map((i) => RACERS[i]);
+  // ?laps=1 shortens races (handy for testing).
+  const lapsOverride = parseInt(new URLSearchParams(location.search).get('laps'), 10);
+  const trackDef = lapsOverride > 0
+    ? { ...TRACKS[chosenTrack], laps: lapsOverride }
+    : TRACKS[chosenTrack];
   race = new Race({
-    trackDef: TRACKS[chosenTrack],
+    trackDef,
     racers,
     playerIndex: 0,
     onEvent: onRaceEvent,

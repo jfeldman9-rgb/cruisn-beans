@@ -257,13 +257,16 @@ export class Race {
     }
 
     // Steering (less authority in the air, a bit floaty on turbo).
+    // Note: positive lateral x points screen-right for a camera looking
+    // along the track tangent, so steer maps to +x directly.
     const grip = car.grounded ? 1 : 0.35;
     const authority = r.steer * grip * (this.playerTurbo ? 0.9 : 1);
-    car.x += steer * authority * (14 + car.speed * 0.22) * dt * -1;
+    car.x += steer * authority * (14 + car.speed * 0.22) * dt;
 
-    // Centrifugal push on curves: positive curvature (left turn) pushes right.
+    // Centrifugal push: positive curvature bends toward +x, so the car is
+    // flung toward -x (outward) unless the player steers into it.
     const curv = this.track.curvatureAt(car.s);
-    car.x += curv * car.speed * car.speed * 0.011 * dt * (2 - r.stats.grip);
+    car.x -= curv * car.speed * car.speed * 0.011 * dt * (2 - r.stats.grip);
     car.lean = THREE.MathUtils.lerp(car.lean, steer * -0.14 + curv * 1.4, Math.min(1, 8 * dt));
 
     if (Math.abs(car.x) > MAX_X) {
