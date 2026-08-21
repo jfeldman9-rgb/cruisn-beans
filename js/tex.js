@@ -555,6 +555,385 @@ export function rivalRearTexture(color) {
   return tex(c);
 }
 
+// ---- named racer cars (straight-on gameplay sprites) ----
+//
+// The photographed/select-screen art is intentionally a dramatic 3/4 view.
+// It does not work as the neutral frame of a billboard racer: even when the
+// quad is aligned perfectly with the camera, the car appears to crab across
+// the road.  These small, centered canvas sprites are the straight front/rear
+// frames used by gameplay.  The silhouettes stay symmetrical while the
+// drivers, paint, lamps and trim keep each ride recognizable at cabinet scale.
+
+const NAMED_CARS = new Set(['andy', 'adam', 'lance', 'elon']);
+
+function carPoly(g, points, fill, stroke = '#16161c', lineWidth = 2) {
+  g.beginPath();
+  points.forEach(([x, y], i) => { if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+  g.closePath();
+  g.fillStyle = fill;
+  g.fill();
+  if (stroke) {
+    g.strokeStyle = stroke;
+    g.lineWidth = lineWidth;
+    g.stroke();
+  }
+}
+
+function carLine(g, points, color, lineWidth = 2) {
+  g.beginPath();
+  points.forEach(([x, y], i) => { if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+  g.strokeStyle = color;
+  g.lineWidth = lineWidth;
+  g.stroke();
+}
+
+function carWheel(g, x, y, w = 18, h = 27) {
+  g.fillStyle = '#111116';
+  g.fillRect(x, y, w, h);
+  g.fillStyle = '#2c2c34';
+  g.fillRect(x + 3, y + 3, w - 6, h - 6);
+  g.fillStyle = '#777784';
+  g.fillRect(x + 5, y + 7, w - 10, h - 14);
+  g.fillStyle = '#c9c9d0';
+  g.fillRect(x + 7, y + 10, w - 14, h - 20);
+}
+
+function driverColors(id) {
+  if (id === 'andy') return { skin: '#c98255', skinShade: '#8d4f35', hair: '#d8d8dc', hairShade: '#5c5c64', shirt: '#34343d' };
+  if (id === 'adam') return { skin: '#cb895f', skinShade: '#8f553b', hair: '#17171c', hairShade: '#32323a', shirt: '#20252c' };
+  if (id === 'lance') return { skin: '#d59a72', skinShade: '#925e45', hair: '#f1f1e8', hairShade: '#bdbdb8', shirt: '#b52d27' };
+  return { skin: '#d99569', skinShade: '#965b42', hair: '#2b2024', hairShade: '#5a3943', shirt: '#11131a' };
+}
+
+function drawDriver(g, id, cx, baseY, front) {
+  const d = driverColors(id);
+  // Shoulders and neck.
+  carPoly(g, [[cx - 13, baseY], [cx - 9, baseY - 10], [cx + 9, baseY - 10], [cx + 13, baseY]], d.shirt, '#17171c', 1);
+  g.fillStyle = d.skinShade;
+  g.fillRect(cx - 4, baseY - 16, 8, 8);
+  // Pixel-cut face and ears.
+  g.fillStyle = d.skinShade;
+  g.fillRect(cx - 9, baseY - 29, 18, 16);
+  g.fillStyle = d.skin;
+  g.fillRect(cx - 7, baseY - 31, 14, 18);
+  g.fillRect(cx - 9, baseY - 26, 2, 7);
+  g.fillRect(cx + 7, baseY - 26, 2, 7);
+
+  if (id === 'lance') {
+    // Bald crown, white side hair and moustache.
+    g.fillStyle = d.skin;
+    g.fillRect(cx - 6, baseY - 33, 12, 5);
+    g.fillStyle = d.hair;
+    g.fillRect(cx - 9, baseY - 30, 3, 10);
+    g.fillRect(cx + 6, baseY - 30, 3, 10);
+    if (front) {
+      g.fillRect(cx - 6, baseY - 19, 12, 3);
+      g.fillStyle = d.hairShade;
+      g.fillRect(cx - 2, baseY - 18, 4, 2);
+    }
+  } else if (id === 'elon') {
+    // Exaggerated high/spiky hair remains readable above the roadster.
+    g.fillStyle = d.hair;
+    carPoly(g, [
+      [cx - 10, baseY - 29], [cx - 13, baseY - 37], [cx - 8, baseY - 35],
+      [cx - 7, baseY - 41], [cx - 2, baseY - 36], [cx + 2, baseY - 43],
+      [cx + 5, baseY - 36], [cx + 11, baseY - 40], [cx + 9, baseY - 29],
+    ], d.hair, null);
+    g.fillStyle = d.hairShade;
+    g.fillRect(cx - 7, baseY - 34, 13, 3);
+  } else {
+    g.fillStyle = d.hair;
+    carPoly(g, [
+      [cx - 8, baseY - 27], [cx - 8, baseY - 34], [cx - 3, baseY - 37],
+      [cx + 6, baseY - 35], [cx + 8, baseY - 28],
+    ], d.hair, null);
+    g.fillStyle = d.hairShade;
+    g.fillRect(cx - 7, baseY - 33, 5, 3);
+    if (id === 'andy') g.fillRect(cx + 4, baseY - 34, 4, 7);
+  }
+
+  if (front) {
+    // Eyes, nose and a one-pixel cabinet grin.
+    g.fillStyle = '#202027';
+    g.fillRect(cx - 5, baseY - 25, 2, 2);
+    g.fillRect(cx + 3, baseY - 25, 2, 2);
+    g.fillStyle = d.skinShade;
+    g.fillRect(cx, baseY - 23, 2, 4);
+    g.fillStyle = id === 'elon' ? '#f4f4ee' : '#542f2b';
+    g.fillRect(cx - 4, baseY - 17, 8, id === 'elon' ? 2 : 1);
+  }
+}
+
+function drawRearConvertible(g, id) {
+  const andy = id === 'andy';
+  const adam = id === 'adam';
+  const silver = id === 'elon';
+  const body = andy ? '#d51f2a' : adam ? '#efefee' : '#c9cdd2';
+  const bodyLight = andy ? '#ff4a4a' : adam ? '#ffffff' : '#eef1f4';
+  const bodyShade = andy ? '#8d1018' : adam ? '#aeb2b6' : '#777d86';
+  const trim = silver ? '#363941' : '#24242b';
+
+  // Wide rear tires sit behind a genuinely centered body silhouette.
+  carWheel(g, 10, 72, silver ? 21 : 19, silver ? 30 : 28);
+  carWheel(g, silver ? 129 : 131, 72, silver ? 21 : 19, silver ? 30 : 28);
+
+  // Open cabin, seat backs and straight rear deck.
+  carPoly(g, [[31, 49], [39, 32], [121, 32], [129, 49]], trim, '#111116', 2);
+  g.fillStyle = '#16171d';
+  g.fillRect(39, 40, 33, 18);
+  g.fillRect(88, 40, 33, 18);
+  g.fillStyle = '#565a63';
+  g.fillRect(43, 43, 25, 5);
+  g.fillRect(92, 43, 25, 5);
+  drawDriver(g, id, silver ? 94 : 61, 51, false);
+
+  // Trapezoidal body, fenders and layered deck shading.
+  carPoly(g, [[21, 52], [139, 52], [151, 72], [147, 95], [13, 95], [9, 72]], body, '#17171c', 3);
+  carPoly(g, [[28, 52], [132, 52], [139, 63], [21, 63]], bodyLight, null);
+  g.fillStyle = bodyShade;
+  g.fillRect(16, 83, 128, 12);
+  g.fillStyle = trim;
+  g.fillRect(30, 59, 100, 5);
+
+  if (andy) {
+    // Fox-body style three-segment rectangular lamps and dark center panel.
+    g.fillStyle = '#2a1619';
+    g.fillRect(19, 66, 122, 17);
+    [23, 33, 43, 107, 117, 127].forEach((x) => {
+      g.fillStyle = '#ed3034'; g.fillRect(x, 68, 8, 11);
+      g.fillStyle = '#ff7770'; g.fillRect(x + 1, 69, 6, 3);
+    });
+    g.fillStyle = '#b8bcc2';
+    g.fillRect(65, 69, 30, 10);
+    g.fillStyle = '#24242b';
+    g.fillRect(69, 72, 22, 5);
+    g.fillStyle = '#d9d9dc';
+    g.fillRect(15, 91, 130, 5);
+    g.fillStyle = '#25252b';
+    g.fillRect(30, 97, 13, 4); g.fillRect(117, 97, 13, 4);
+  } else if (adam) {
+    // Clean EV rear: full-width light blade, glass-black center, no exhaust.
+    g.fillStyle = '#303139';
+    g.fillRect(23, 66, 114, 15);
+    g.fillStyle = '#e92734';
+    g.fillRect(25, 67, 110, 5);
+    g.fillStyle = '#ff6b72';
+    g.fillRect(31, 67, 98, 2);
+    g.fillStyle = '#d8d9dc';
+    g.fillRect(65, 73, 30, 8);
+    g.fillStyle = '#22242a';
+    g.fillRect(69, 75, 22, 4);
+    g.fillStyle = '#8f949b';
+    g.fillRect(18, 91, 124, 4);
+    g.fillStyle = '#353840';
+    g.fillRect(50, 96, 60, 4);
+  } else {
+    // Low silver roadster: four round lamps and mesh diffuser.
+    g.fillStyle = '#3d4149';
+    g.fillRect(18, 68, 124, 18);
+    [30, 48, 112, 130].forEach((x, i) => {
+      g.fillStyle = '#74151b';
+      g.beginPath(); g.arc(x, 76, i === 1 || i === 2 ? 7 : 6, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ff4548';
+      g.beginPath(); g.arc(x - 1, 74, 3, 0, Math.PI * 2); g.fill();
+    });
+    g.fillStyle = '#dfe2e7';
+    g.fillRect(66, 69, 28, 10);
+    g.fillStyle = '#1b1d22';
+    g.fillRect(70, 72, 20, 5);
+    g.fillStyle = '#202229';
+    for (let x = 45; x <= 110; x += 8) g.fillRect(x, 89, 4, 7);
+    g.fillStyle = '#e2e5e8';
+    g.fillRect(20, 88, 120, 3);
+    g.fillStyle = '#444851';
+    g.fillRect(25, 94, 22, 4); g.fillRect(113, 94, 22, 4);
+  }
+
+  // Center highlight makes the symmetry obvious even during scaling.
+  g.fillStyle = bodyLight;
+  g.fillRect(79, 54, 2, 8);
+}
+
+function drawFrontConvertible(g, id) {
+  const andy = id === 'andy';
+  const adam = id === 'adam';
+  const silver = id === 'elon';
+  const body = andy ? '#d51f2a' : adam ? '#efefee' : '#c9cdd2';
+  const bodyLight = andy ? '#ff4a4a' : adam ? '#ffffff' : '#eef1f4';
+  const bodyShade = andy ? '#8d1018' : adam ? '#aeb2b6' : '#777d86';
+
+  carWheel(g, 9, 71, silver ? 22 : 19, silver ? 31 : 28);
+  carWheel(g, silver ? 129 : 132, 71, silver ? 22 : 19, silver ? 31 : 28);
+
+  // Straight windshield and driver; both A-pillars have identical geometry.
+  carPoly(g, [[31, 56], [41, 27], [119, 27], [129, 56]], '#252a34', '#15161b', 3);
+  carPoly(g, [[39, 52], [47, 32], [113, 32], [121, 52]], '#78a5bd', null);
+  g.fillStyle = 'rgba(210,240,255,0.55)';
+  g.fillRect(50, 34, 4, 15);
+  g.fillRect(105, 34, 3, 15);
+  drawDriver(g, id, silver ? 94 : 61, 53, true);
+  // Windshield center/seat separation stays vertical, never a fake 3/4 seam.
+  g.fillStyle = '#252830';
+  g.fillRect(79, 31, 2, 22);
+
+  carPoly(g, [[20, 54], [140, 54], [152, 77], [145, 96], [15, 96], [8, 77]], body, '#17171c', 3);
+  carPoly(g, [[30, 55], [130, 55], [139, 72], [21, 72]], bodyLight, null);
+  carLine(g, [[80, 56], [80, 82]], bodyShade, 2);
+  carLine(g, [[32, 59], [20, 72]], bodyShade, 2);
+  carLine(g, [[128, 59], [140, 72]], bodyShade, 2);
+
+  if (andy) {
+    // Rectangular 90s lamps and a deep black grille.
+    g.fillStyle = '#d8e7ec';
+    g.fillRect(18, 69, 35, 13); g.fillRect(107, 69, 35, 13);
+    g.fillStyle = '#fff5b4';
+    g.fillRect(22, 72, 26, 6); g.fillRect(112, 72, 26, 6);
+    g.fillStyle = '#202127';
+    g.fillRect(57, 70, 46, 18);
+    for (let x = 60; x < 101; x += 8) g.fillRect(x, 90, 5, 2);
+    g.fillStyle = '#aeb2b8';
+    g.fillRect(13, 91, 134, 5);
+    g.fillStyle = '#f4f4f2';
+    g.fillRect(78, 74, 4, 4);
+  } else if (adam) {
+    // Slim modern lamps and broad lower intake; deliberately badge-free.
+    carPoly(g, [[18, 69], [55, 66], [52, 77], [21, 80]], '#d7eef4', '#555b63', 1);
+    carPoly(g, [[105, 66], [142, 69], [139, 80], [108, 77]], '#d7eef4', '#555b63', 1);
+    g.fillStyle = '#fff6ae';
+    g.fillRect(24, 72, 24, 3); g.fillRect(112, 72, 24, 3);
+    carPoly(g, [[45, 82], [115, 82], [106, 94], [54, 94]], '#23262c', null);
+    g.fillStyle = '#8d9298';
+    g.fillRect(17, 92, 126, 4);
+  } else {
+    // Low roadster snout with four round lamps and corner brake ducts.
+    [31, 48, 112, 129].forEach((x, i) => {
+      g.fillStyle = '#252932';
+      g.beginPath(); g.arc(x, 73, i === 1 || i === 2 ? 8 : 7, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#e8f5ff';
+      g.beginPath(); g.arc(x - 1, 71, 4, 0, Math.PI * 2); g.fill();
+    });
+    carPoly(g, [[52, 84], [108, 84], [101, 95], [59, 95]], '#20232a', null);
+    g.fillStyle = '#30343c';
+    g.fillRect(17, 84, 19, 9); g.fillRect(124, 84, 19, 9);
+    g.fillStyle = '#eef1f3';
+    g.fillRect(22, 81, 116, 3);
+  }
+}
+
+function drawRearVan(g) {
+  const body = '#8b4d28';
+  const bodyLight = '#b56b35';
+  const bodyShade = '#61341f';
+  carWheel(g, 18, 75, 19, 29);
+  carWheel(g, 123, 75, 19, 29);
+  // A tall, square silhouette immediately distinguishes Lance from the cars.
+  carPoly(g, [[25, 17], [135, 17], [143, 92], [137, 100], [23, 100], [17, 92]], body, '#17171c', 3);
+  g.fillStyle = bodyLight;
+  g.fillRect(28, 21, 104, 5);
+  g.fillStyle = '#20242b';
+  g.fillRect(31, 29, 45, 29); g.fillRect(84, 29, 45, 29);
+  g.fillStyle = '#4b6470';
+  g.fillRect(35, 33, 37, 20); g.fillRect(88, 33, 37, 20);
+  g.fillStyle = '#94bdca';
+  g.fillRect(38, 35, 4, 14); g.fillRect(91, 35, 4, 14);
+  // Split doors, hinges and a small rear-window glimpse of the driver.
+  g.fillStyle = bodyShade;
+  g.fillRect(78, 25, 4, 67);
+  g.fillStyle = '#d0d0cb';
+  [32, 52, 76].forEach((y) => { g.fillRect(76, y, 3, 6); g.fillRect(82, y, 3, 6); });
+  drawDriver(g, 'lance', 105, 57, false);
+
+  // Hand-painted sunset and cactus mural across both rear doors.
+  g.fillStyle = '#e77f32';
+  g.fillRect(29, 62, 102, 23);
+  g.fillStyle = '#f4bd3d';
+  g.beginPath(); g.arc(80, 73, 10, Math.PI, 0); g.fill();
+  g.fillStyle = '#713223';
+  carPoly(g, [[29, 83], [45, 76], [61, 82], [78, 74], [96, 82], [113, 76], [131, 83], [131, 87], [29, 87]], '#713223', null);
+  g.fillStyle = '#315d35';
+  g.fillRect(43, 67, 4, 17); g.fillRect(39, 72, 4, 7); g.fillRect(47, 70, 4, 8);
+  g.fillRect(115, 68, 4, 16); g.fillRect(111, 74, 4, 6);
+  // Vertical lamps and chrome step bumper.
+  g.fillStyle = '#70181a';
+  g.fillRect(21, 62, 8, 24); g.fillRect(131, 62, 8, 24);
+  g.fillStyle = '#f04a3f';
+  g.fillRect(23, 64, 4, 8); g.fillRect(133, 64, 4, 8);
+  g.fillStyle = '#ffbf58';
+  g.fillRect(23, 75, 4, 5); g.fillRect(133, 75, 4, 5);
+  g.fillStyle = '#c8cbd0';
+  g.fillRect(17, 91, 126, 8);
+  g.fillStyle = '#656972';
+  g.fillRect(27, 95, 106, 3);
+}
+
+function drawFrontVan(g) {
+  const body = '#8b4d28';
+  const light = '#b56b35';
+  carWheel(g, 17, 75, 20, 29);
+  carWheel(g, 123, 75, 20, 29);
+  carPoly(g, [[25, 17], [135, 17], [143, 91], [136, 100], [24, 100], [17, 91]], body, '#17171c', 3);
+  g.fillStyle = light;
+  g.fillRect(29, 21, 102, 5);
+  // Two-piece upright windshield with Lance centered in the driver pane.
+  carPoly(g, [[31, 29], [77, 27], [77, 59], [29, 59]], '#557583', '#1d2025', 2);
+  carPoly(g, [[83, 27], [129, 29], [131, 59], [83, 59]], '#557583', '#1d2025', 2);
+  g.fillStyle = '#a5d1dc';
+  g.fillRect(35, 33, 4, 20); g.fillRect(87, 31, 4, 21);
+  drawDriver(g, 'lance', 105, 58, true);
+  // Wipers, grille bars, rectangular headlamps and chrome bumper.
+  carLine(g, [[35, 55], [62, 45]], '#22242a', 2);
+  carLine(g, [[125, 55], [98, 45]], '#22242a', 2);
+  g.fillStyle = '#2a2b30';
+  g.fillRect(45, 68, 70, 21);
+  g.fillStyle = '#a9adb4';
+  for (let x = 50; x <= 106; x += 9) g.fillRect(x, 70, 4, 16);
+  g.fillStyle = '#e8f2e7';
+  g.fillRect(21, 67, 23, 14); g.fillRect(116, 67, 23, 14);
+  g.fillStyle = '#fff0a0';
+  g.fillRect(25, 70, 15, 7); g.fillRect(120, 70, 15, 7);
+  // Tiny sunset stripe ties the direct front to the mural van without text.
+  g.fillStyle = '#e77f32';
+  g.fillRect(44, 61, 72, 5);
+  g.fillStyle = '#f4bd3d';
+  g.fillRect(77, 61, 6, 5);
+  g.fillStyle = '#c8cbd0';
+  g.fillRect(16, 91, 128, 8);
+  g.fillStyle = '#5a5e66';
+  g.fillRect(28, 95, 104, 3);
+}
+
+/**
+ * Return a centered, straight-on gameplay texture for a named racer.
+ * Unknown racer IDs return null so callers can fall back to the generic car.
+ * @param {string} racerId andy | adam | lance | elon
+ * @param {'rear'|'front'} view
+ * @returns {THREE.CanvasTexture|null}
+ */
+export function namedCarTexture(racerId, view = 'rear') {
+  const id = String(racerId || '').toLowerCase();
+  if (!NAMED_CARS.has(id)) return null;
+  const c = canvas(160, 112);
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const front = view === 'front';
+  if (id === 'lance') {
+    if (front) drawFrontVan(g); else drawRearVan(g);
+  } else if (front) {
+    drawFrontConvertible(g, id);
+  } else {
+    drawRearConvertible(g, id);
+  }
+  return tex(c);
+}
+
+export function namedCarRearTexture(racerId) {
+  return namedCarTexture(racerId, 'rear');
+}
+
+export function namedCarFrontTexture(racerId) {
+  return namedCarTexture(racerId, 'front');
+}
+
 // ---- animals ----
 
 export function cowTexture() {
@@ -741,6 +1120,53 @@ export function townGateTexture() {
   g.fillText('TEQUILA TOWN', 88, 21);
   g.fillStyle = '#2e7ec4'; g.fillRect(8, 34, 24, 24); g.fillRect(144, 34, 24, 24);
   g.fillStyle = '#ffd23d'; g.fillRect(8, 44, 24, 4); g.fillRect(144, 44, 24, 4);
+  return tex(c);
+}
+
+export function alohaGateTexture() {
+  // Road-spanning postcard set piece with a transparent drive-through center.
+  const c = canvas(192, 92);
+  const g = c.getContext('2d');
+  // Carved tiki pillars.
+  g.fillStyle = '#7a4a24';
+  g.fillRect(0, 10, 38, 82); g.fillRect(154, 10, 38, 82);
+  g.fillStyle = '#9c6733';
+  for (let y = 18; y < 84; y += 18) {
+    g.fillRect(5, y, 28, 7); g.fillRect(159, y, 28, 7);
+  }
+  g.fillStyle = '#24150d';
+  g.fillRect(9, 32, 7, 8); g.fillRect(23, 32, 7, 8);
+  g.fillRect(162, 32, 7, 8); g.fillRect(176, 32, 7, 8);
+  // Hibiscus banner.
+  g.fillStyle = '#e94f9c'; g.fillRect(0, 0, 192, 27);
+  g.fillStyle = '#ffca38';
+  for (let x = 7; x < 192; x += 24) g.fillRect(x, 4, 10, 10);
+  g.fillStyle = '#ffffff';
+  g.textAlign = 'center'; g.font = 'bold 18px "Arial Black", sans-serif';
+  g.fillText('ALOHA COAST', 96, 22);
+  return tex(c);
+}
+
+export function route66GateTexture() {
+  // A deliberately oversized roadside-tourist gateway. The opening remains
+  // transparent so the player drives through the landmark, not past it.
+  const c = canvas(192, 92);
+  const g = c.getContext('2d');
+  g.fillStyle = '#8f4224';
+  g.fillRect(0, 18, 34, 74); g.fillRect(158, 18, 34, 74);
+  g.fillStyle = '#c96a3e';
+  g.fillRect(4, 26, 26, 8); g.fillRect(162, 26, 26, 8);
+  g.fillRect(4, 50, 26, 8); g.fillRect(162, 50, 26, 8);
+  // Sun-faded highway header.
+  g.fillStyle = '#f4f0de'; g.fillRect(0, 0, 192, 27);
+  g.fillStyle = '#1f1f26';
+  g.textAlign = 'center'; g.font = 'bold 14px "Arial Black", sans-serif';
+  g.fillText('DESERT HIGHWAY', 96, 19);
+  // Shield signs on each pillar.
+  g.fillStyle = '#f4f0de';
+  g.fillRect(7, 60, 20, 21); g.fillRect(165, 60, 20, 21);
+  g.fillStyle = '#1f1f26'; g.font = 'bold 9px "Arial Black", sans-serif';
+  g.fillText('66', 17, 75); g.fillText('66', 175, 75);
   return tex(c);
 }
 

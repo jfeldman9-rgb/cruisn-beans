@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
 <title>CRUIS'N BEANS — 90s Arcade Parody Racer</title>
-<link rel="stylesheet" href="css/style.css?v=world-pass-2">
+<link rel="stylesheet" href="css/style.css?v=world-pass-3">
 <link rel="icon" href="assets/img/elon-portrait.png">
 </head>
 <body>
@@ -47,7 +47,7 @@
 <div id="screen-hud" class="screen transparent">
   <div id="hud-top">
     <div class="hud-box"><span id="hud-cp">CP 0/6</span></div>
-    <div class="hud-box time"><label>TIME</label><span id="hud-time">45</span></div>
+    <div class="hud-box time"><label>TIME</label><span id="hud-time">25</span></div>
     <div class="hud-box pos"><span id="hud-pos">7th/7</span></div>
   </div>
   <div id="hud-progress"><div id="hud-progress-fill"></div></div>
@@ -55,21 +55,28 @@
   <div id="hud-beans-box"><span class="bean-ico"></span><span id="hud-beans">&times;0</span></div>
   <div id="hud-mph">0 MPH</div>
   <div id="danger-alert">WRONG WAY TRUCK!<small>DOUBLE-TAP GAS — WHEELIE IT!</small></div>
+  <div id="checkpoint-flash"><small id="checkpoint-count">CHECKPOINT 1/6</small><strong>TIME EXTENDED</strong><span id="checkpoint-bonus">+20 SECONDS</span></div>
   <div id="countdown"></div>
   <div id="toast"></div>
   <div id="rival-pass">
     <img id="rival-pass-car" alt="">
     <div><strong id="rival-pass-name"></strong><span id="rival-pass-copy"></span></div>
   </div>
-  <div id="hint">AUTO&nbsp;GAS!&nbsp;&nbsp;DRAG&nbsp;TO&nbsp;STEER!<br><b>DOUBLE-TAP GAS</b> = WHEELIE TURBO!<br><small>WHEELIE OVER TRAFFIC &bull; FLIP OFF RAMPS</small></div>
+  <div id="hint">
+    <span class="hint-touch">AUTO GAS! &nbsp; DRAG TO STEER!<br><b>DOUBLE-TAP GAS</b> = WHEELIE TURBO!</span>
+    <span class="hint-desktop"><b>A / D OR ARROWS</b> STEER &bull; <b>S</b> BRAKE<br><b>SPACE</b> WHEELIE &bull; <b>C</b> CAMERA</span>
+    <br><small>WHEELIE OVER TRAFFIC &bull; FLIP OFF RAMPS / CRESTS</small>
+  </div>
   <button id="btn-brake" class="pedal">BRAKE</button>
   <button id="btn-gas" class="pedal">GAS<small>2-TAP =<br>WHEELIE</small></button>
+  <button id="btn-camera" aria-label="Change camera">CAM<small>HIGH</small></button>
 </div>
 
 <!-- RESULTS -->
 <div id="screen-results" class="screen">
   <div id="results-title">1st PLACE!</div>
   <div id="results-sub"></div>
+  <div id="finale-gag"></div>
   <div id="results-list"></div>
   <div class="results-btns">
     <button id="btn-retry" class="big-btn">RETRY</button>
@@ -85,7 +92,8 @@
   </svg>
 </button>
 
-<div id="build-badge">P2P BUILD 2</div>
+<div id="build-badge">WORLD PASS 3</div>
+<div id="webgl-warning">3D ROAD UNAVAILABLE IN THIS BROWSER &bull; ENABLE WEBGL TO DRIVE</div>
 
 <div id="rotate-overlay">
   <div class="rotate-card">
@@ -94,6 +102,6 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js?v=world-pass-2"></script>
+<script type="module" src="js/main.js?v=world-pass-3"></script>
 </body>
 </html>

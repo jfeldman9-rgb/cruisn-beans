@@ -2,9 +2,9 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=world-pass-2';
-import * as tex from './tex.js?v=world-pass-2';
-import { audio } from './audio.js?v=world-pass-2';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=world-pass-3';
+import * as tex from './tex.js?v=world-pass-3';
+import { audio } from './audio.js?v=world-pass-3';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
@@ -70,20 +70,30 @@ class PackCar {
     this.recoveryT = 0;
     this.invuln = 0;
     this.airTime = 0;
+    this.airSource = null;
+    this.crestCooldown = 0;
     this.lean = 0;
     this.wanderPhase = Math.random() * Math.PI * 2;
     this.aiWheelieT = 0;
 
     const w = racer.spriteWidth;
-    const rearT = racer.rearSprite ? loadSprite(racer.rearSprite) : tex.rivalRearTexture(racer.color);
-    const frontT = racer.frontSprite ? loadSprite(racer.frontSprite) : rearT;
+    // Select cards retain the Videomaker art. In-race named cars use centered
+    // front/rear cabinet sprites so they face down the road instead of baking
+    // a permanent 3/4 camera angle into every frame.
+    const namedRearT = tex.namedCarRearTexture(racer.id);
+    const namedFrontT = tex.namedCarFrontTexture(racer.id);
+    const rearT = namedRearT || (racer.rearSprite ? loadSprite(racer.rearSprite) : tex.rivalRearTexture(racer.color));
+    const frontT = namedFrontT || (racer.frontSprite ? loadSprite(racer.frontSprite) : rearT);
     const img = rearT.image;
     const ratio = (img && img.height) ? img.height / img.width : 0.55;
     this.h = w * (racer.rearSprite ? Math.max(0.45, Math.min(0.68, ratio)) : 0.72);
     this.rearT = rearT;
     this.frontT = frontT;
     this.mesh = makeQuad(rearT, w, this.h);
-    this.visualScale = isPlayer ? 1.55 : 1;
+    // The old cabinet crop inflated the player by 55%, then parked the camera
+    // almost on the rear bumper. Keep the hero car substantial, but leave
+    // enough road in frame to read rivals and traffic.
+    this.visualScale = isPlayer ? 1.16 : 1;
     this.showingFront = false;
     this.mirror = 1;
 
@@ -110,9 +120,12 @@ class Traffic {
   constructor(track, oncoming, index, total) {
     this.track = track;
     this.oncoming = oncoming;
-    // Several semis deliberately run the cruising lane. A cold player
-    // should encounter the wheelie/leapfrog lesson without hunting for it.
-    this.wrongWay = oncoming && index % 4 === 0;
+    // A semi deliberately runs the cruising lane. A cold player should
+    // encounter the wheelie/leapfrog lesson without hunting for it.
+    // One authored wrong-lane semi teaches the wheelie. Earlier builds used
+    // three short-loop semis, which turned Hawaii into either endless bonus
+    // farming or an unavoidable crash spam wall.
+    this.wrongWay = oncoming && index === 0;
     const kindRoll = Math.random();
     if (oncoming) {
       if (this.wrongWay || kindRoll < 0.34) { this.kind = 'semi'; this.w = 7.4; this.h = 6.6; }
@@ -141,7 +154,11 @@ class Traffic {
     this.x = (this.wrongWay ? LANE_PLAYER : oncoming ? LANE_ONCOMING : LANE_PLAYER)
       + (Math.random() - 0.5) * (this.wrongWay ? 1.2 : 3);
     this.speed = oncoming ? 24 + Math.random() * 14 : 19 + Math.random() * 9;
+    this.cruiseSpeed = this.speed;
     this.clearedBy = 0; // leapfrog cooldown flag
+    this.crashT = 0;
+    this.crashSpin = 0;
+    this.retired = false;
   }
 }
 
@@ -228,6 +245,7 @@ export class Race {
 
     this.state = this.demo ? 'race' : 'pre';
     this.raceTime = 0;
+    this.stuntCredit = 0;
     this.timeLeft = opts.trackDef.startTime;
     this.countdownT = 0;
     this.time = 0;
@@ -237,6 +255,8 @@ export class Race {
     this.lastBumpSound = 0;
     this.lastHonk = 0;
     this.danger = false;
+    this.cameraModes = ['HIGH CHASE', 'ARCADE CHASE', 'BUMPER'];
+    this.cameraMode = 0;
 
     this.initParticles();
     this.tmpV = new THREE.Vector3();
@@ -320,15 +340,19 @@ export class Race {
     }
 
     const racing = this.state === 'race';
+    let clockExpired = false;
     if (racing && !this.demo && !this.player.finished) {
       this.raceTime += dt;
       this.timeLeft -= dt;
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
-        this.endRace(true);
+        // Resolve this frame's movement before calling the race. Crossing a
+        // checkpoint on the final tick must be a genuine clock save.
+        clockExpired = true;
       }
     }
 
+    this.cars.forEach((car) => { car.frameStartS = car.s; });
     this.cars.forEach((car) => {
       if (car.isPlayer && !this.demo) {
         this.updatePlayer(car, dt, racing && !car.finished ? input : null);
@@ -343,9 +367,13 @@ export class Race {
     this.updateAnimals(dt);
     this.resolvePackCollisions(dt);
     if (!this.demo) this.checkProgress();
+    if (!this.demo) this.checkFinishes(dt);
+    if (clockExpired && this.state === 'race' && !this.player.finished && this.timeLeft <= 0) {
+      this.endRace(true);
+    }
+    this.updateCamera(dt);
     this.updateVisuals(dt);
     this.updateParticles(dt);
-    this.updateCamera(dt);
 
     if (!this.demo) {
       const p01 = Math.min(1, this.player.speed / this.player.racer.topSpeed);
@@ -361,6 +389,7 @@ export class Race {
     const events = input ? input.consumeStunts() : { wheelie: false, twoWheel: 0 };
 
     car.wheelieCooldown = Math.max(0, car.wheelieCooldown - dt);
+    car.crestCooldown = Math.max(0, car.crestCooldown - dt);
     car.invuln = Math.max(0, car.invuln - dt);
     car.recoveryT = Math.max(0, car.recoveryT - dt);
 
@@ -379,6 +408,7 @@ export class Race {
         car.wheelieT = car.wheelieFullT;
         car.wheelieCooldown = 2.0;
         audio.wheelie();
+        audio.announce('Wheelie turbo!');
         audio.startFart();       // the joke exhaust
         setTimeout(() => audio.stopFart(), 700);
         this.onEvent('toast', 'WHEELIE!');
@@ -532,6 +562,7 @@ export class Race {
       }
     });
 
+    this.handleCrest(car);
     this.handleRamps(car);
     this.trafficInteract(car, dt, true);
     this.animalInteract(car);
@@ -551,6 +582,7 @@ export class Race {
         car.x = sc.side * (ROAD_HALF - 5);
         car.sx = 0;
         this.onEvent('toast', 'SHORTCUT PAYS OFF!');
+        audio.announce('Dirty shortcut pays!');
       }
     } else {
       car.s += car.speed * dt;
@@ -565,6 +597,7 @@ export class Race {
       car.ss = 0;
       car.sx = 0;
       audio.checkpoint();
+      audio.announce('Take the shortcut!');
       this.onEvent('toast', `SHORTCUT! CUT ${Math.round(sc.savedDistance)}m`);
     }
   }
@@ -572,6 +605,10 @@ export class Race {
   // ---------------- AI ----------------
   updateAI(car, dt, go) {
     const r = car.racer;
+    if (car.finished) {
+      car.speed = 0;
+      return;
+    }
     if (!go) {
       car.speed = Math.max(0, car.speed - 30 * dt);
       car.s += car.speed * dt;
@@ -617,6 +654,7 @@ export class Race {
       targetX = this.player.x + passSide * 5.2;
     }
     this.traffic.forEach((v) => {
+      if (v.retired || v.s >= this.track.length - 20) return;
       const ds = v.s - car.s;
       if (ds > 4 && ds < 34 && Math.abs(v.x - car.x) < 3.4) {
         targetX = v.x > car.x ? v.x - 5.4 : v.x + 5.4;
@@ -637,12 +675,8 @@ export class Race {
     car.s += car.speed * dt;
     this.handleRamps(car);
     this.trafficInteract(car, dt, false);
+    this.animalInteract(car, false);
 
-    if (!this.demo && !car.finished && car.s >= this.track.length - 8) {
-      car.finished = true;
-      car.finishTime = this.raceTime;
-      this.finishOrder.push(car);
-    }
     if (this.demo && car.s >= this.track.length - 60) {
       // Loop the attract drive.
       this.cars.forEach((c, i) => { c.s = 6 - i * 8; c.speed = 20; });
@@ -667,23 +701,55 @@ export class Race {
     const anchor = this.player.s;
     let danger = false;
     this.traffic.forEach((v) => {
+      const retire = () => {
+        v.retired = true;
+        v.group.visible = false;
+      };
+      const respawn = (minimum, span, lane, jitter) => {
+        const first = anchor + minimum;
+        const last = this.track.length - 35;
+        if (first >= last) {
+          retire();
+          return false;
+        }
+        v.s = first + Math.random() * Math.min(span, last - first);
+        v.x = lane + (Math.random() - 0.5) * jitter;
+        v.clearedBy = 0;
+        v.crashT = 0;
+        v.crashSpin = 0;
+        v.speed = v.cruiseSpeed;
+        v.retired = false;
+        return true;
+      };
+      if (v.retired) {
+        v.group.visible = false;
+        return;
+      }
       const moving = this.state === 'race' || this.demo;
-      if (moving) v.s += (v.oncoming ? -v.speed : v.speed) * dt;
+      if (v.crashT > 0) {
+        v.crashT = Math.max(0, v.crashT - dt);
+        v.crashSpin += dt * 5.2;
+        // A struck vehicle becomes a real temporary obstruction instead of a
+        // ghost the pack silently passes through.
+        v.speed = Math.max(0, v.speed - 48 * dt);
+        if (v.crashT === 0) v.speed = v.cruiseSpeed;
+      } else if (moving) {
+        v.s += (v.oncoming ? -v.speed : v.speed) * dt;
+      }
       // Gentle lane wobble.
       v.x += Math.sin(this.time * 0.7 + v.s * 0.01) * dt * 0.4;
+      if (!v.oncoming && v.s >= this.track.length - 20) {
+        retire();
+        return;
+      }
       // Recycle around the player so the road always has life.
       if (v.oncoming && v.s < anchor - 80) {
-        v.s = anchor + 500 + Math.random() * 700;
-        v.x = (v.wrongWay ? LANE_PLAYER : LANE_ONCOMING)
-          + (Math.random() - 0.5) * (v.wrongWay ? 1.2 : 3);
-        v.clearedBy = 0;
+        if (!respawn(v.wrongWay ? 2300 : 500, v.wrongWay ? 900 : 700,
+          v.wrongWay ? LANE_PLAYER : LANE_ONCOMING, v.wrongWay ? 1.2 : 3)) return;
       } else if (!v.oncoming && v.s < anchor - 160) {
-        v.s = anchor + 400 + Math.random() * 500;
-        v.x = LANE_PLAYER + (Math.random() - 0.5) * 3;
-        v.clearedBy = 0;
-      } else if (v.s > anchor + 1600) {
-        v.s = anchor + 300 + Math.random() * 900;
-        v.clearedBy = 0;
+        if (!respawn(400, 500, LANE_PLAYER, 3)) return;
+      } else if (!v.oncoming && v.s > anchor + 1600) {
+        if (!respawn(300, 900, LANE_PLAYER, 3)) return;
       }
       const visible = Math.abs(v.s - anchor) < 1300;
       v.group.visible = visible;
@@ -705,6 +771,7 @@ export class Race {
   trafficInteract(car, dt, isPlayer) {
     if (car.mode === 'shortcut') return;
     this.traffic.forEach((v) => {
+      if (v.retired || v.s >= this.track.length - 20) return;
       const ds = v.s - car.s;
       const absDs = Math.abs(ds);
       if (absDs > 40) return;
@@ -725,9 +792,11 @@ export class Race {
         car.grounded = false;
         car.vy = 15;
         car.airTime = 0;
+        car.airSource = 'leapfrog';
         car.stuntsLanded++;
         this.timeLeft += 1;
         audio.bigAir();
+        audio.announce('Leapfrog!');
         this.onEvent('toast', 'LEAPFROG! +1s');
         return;
       }
@@ -740,16 +809,20 @@ export class Race {
         if (isPlayer) {
           if (car.speed > 44) {
             // Full crash pile.
-            car.spinT = 1.45;
-            car.crashHold = 0.72;
+            car.spinT = 2.05;
+            car.crashHold = 1.08;
             car.spinYaw = 0;
             car.speed = 0;
             car.lateralVel = 0;
             car.wheelieT = 0;
             car.twoWheelT = 0;
             car.twoWheelClean = false;
+            v.crashT = 1.75;
+            v.crashSpin = 0;
+            v.speed = 0;
             audio.crash();
             audio.honk();
+            audio.announce('Pileup! The pack is coming!');
             this.shake = 1;
             this.onEvent('toast', 'CRASH PILE! PACK GOING BY...');
           } else {
@@ -760,7 +833,12 @@ export class Race {
           }
           car.invuln = 0.8;
         } else {
-          car.speed *= 0.55;
+          if (v.crashT > 0) {
+            car.spinT = Math.max(car.spinT, 0.7);
+            car.speed *= 0.2;
+          } else {
+            car.speed *= 0.55;
+          }
           car.x += car.x > v.x ? 2.4 : -2.4;
         }
       }
@@ -809,7 +887,7 @@ export class Race {
     });
   }
 
-  animalInteract(car) {
+  animalInteract(car, isPlayer = true) {
     if (car.mode === 'shortcut') return;
     this.animals.forEach((a) => {
       if (a.hitT > 0 || !a.group.visible) return;
@@ -817,15 +895,33 @@ export class Race {
         a.hitT = 1.4;
         a.launchDir = Math.random() > 0.5 ? 1 : -1;
         car.speed *= a.def.cost;
-        this.shake = Math.min(1, this.shake + 0.45);
-        audio.animal(a.def.cry);
-        const cries = { moo: 'MOO!!', heehaw: 'HEE-HAW!!', squeal: 'WEE WEE WEE!!', thud: 'BONK!', cluck: 'BAGAWK!!', squawk: 'SQUAWK!!' };
-        this.onEvent('toast', cries[a.def.cry] || 'OOF!');
+        if (isPlayer) {
+          this.shake = Math.min(1, this.shake + 0.45);
+          audio.animal(a.def.cry);
+          const cries = { moo: 'MOO!!', heehaw: 'HEE-HAW!!', squeal: 'WEE WEE WEE!!', thud: 'BONK!', cluck: 'BAGAWK!!', squawk: 'SQUAWK!!' };
+          this.onEvent('toast', cries[a.def.cry] || 'OOF!');
+        }
       }
     });
   }
 
   // ---------------- ramps / air ----------------
+  handleCrest(car) {
+    if (!car.grounded || car.mode === 'shortcut' || car.crestCooldown > 0 || car.speed < 42) return;
+    const crest = this.track.crests.find((item) => car.s >= item.s - 2 && car.s <= item.s + 4);
+    if (!crest) return;
+    car.grounded = false;
+    car.vy = 11 + crest.strength * 4;
+    car.airTime = 0;
+    car.airSource = 'crest';
+    car.crestCooldown = 2.5;
+    if (car.isPlayer) {
+      audio.bigAir();
+      audio.announce('Crest! Flip it!');
+      this.onEvent('toast', 'CREST AIR! FLIP IT!');
+    }
+  }
+
   handleRamps(car) {
     if (!car.grounded || car.mode === 'shortcut') return;
     for (const ramp of this.track.ramps) {
@@ -835,6 +931,7 @@ export class Race {
         car.grounded = false;
         car.vy = car.speed * (ramp.hgt / ramp.len) * 1.5;
         car.airTime = 0;
+        car.airSource = 'ramp';
         if (car.isPlayer) audio.bigAir();
         break;
       }
@@ -855,9 +952,13 @@ export class Race {
         const complete = car.flipProg > Math.PI * 2 * 0.82;
         if (complete && car.isPlayer) {
           car.stuntsLanded++;
+          this.stuntCredit += 3;
           this.timeLeft += 3;
-          this.onEvent('toast', car.flipAxis === 'x' ? 'FLIP! +3s' : 'SIDE FLIP! +3s');
+          this.onEvent('toast', car.flipAxis === 'x'
+            ? 'FLIP! CLOCK +3s • RECORD -3s'
+            : 'SIDE FLIP! CLOCK +3s • RECORD -3s');
           audio.bigAir();
+          audio.announce('Record time cut!');
           this.shake = Math.min(1, this.shake + 0.3);
         } else if (car.isPlayer) {
           car.speed *= 0.5;
@@ -866,11 +967,12 @@ export class Race {
           this.shake = 1;
         }
         car.flipProg = 0;
-      } else if (car.isPlayer && car.airTime > 0.55) {
+      } else if (car.isPlayer && car.airTime > 0.55 && car.airSource !== 'leapfrog') {
         this.timeLeft += 1.5;
         this.onEvent('toast', car.airTime > 1.0 ? 'HUGE AIR! +1.5s' : 'BIG AIR! +1.5s');
         this.shake = Math.min(1, this.shake + 0.3);
       }
+      car.airSource = null;
     }
   }
 
@@ -902,23 +1004,52 @@ export class Race {
   // ---------------- progress / results ----------------
   checkProgress() {
     const car = this.player;
-    if (car.finished) return;
+    if (car.finished || this.state !== 'race') return;
     const cps = this.track.checkpoints;
-    if (this.nextCheckpoint < cps.length && car.s >= cps[this.nextCheckpoint]) {
+    while (this.nextCheckpoint < cps.length && car.s >= cps[this.nextCheckpoint]) {
       this.nextCheckpoint++;
       this.timeLeft += this.opts.trackDef.checkpointBonus;
       audio.checkpoint();
-      this.onEvent('toast', `CHECKPOINT +${this.opts.trackDef.checkpointBonus}s`);
-    }
-    if (car.s >= this.track.length - 8) {
-      car.finished = true;
-      car.finishTime = this.raceTime;
-      this.finishOrder.push(car);
-      this.endRace(false);
+      this.onEvent('checkpoint', {
+        bonus: this.opts.trackDef.checkpointBonus,
+        index: this.nextCheckpoint,
+        total: cps.length,
+      });
     }
   }
 
+  checkFinishes(dt) {
+    if (this.state !== 'race') return;
+    const finishS = this.track.length - 8;
+    const frameStartTime = Math.max(0, this.raceTime - dt);
+    const crossings = [];
+    this.cars.forEach((car) => {
+      if (car.finished || car.s < finishS) return;
+      const from = Number.isFinite(car.frameStartS) ? car.frameStartS : car.s;
+      const travel = car.s - from;
+      const fraction = travel > 0
+        ? THREE.MathUtils.clamp((finishS - from) / travel, 0, 1)
+        : 1;
+      crossings.push({ car, fraction });
+    });
+    crossings.sort((a, b) => a.fraction - b.fraction || a.car.gridIndex - b.car.gridIndex);
+    crossings.forEach(({ car, fraction }) => {
+      car.finished = true;
+      car.rawFinishTime = frameStartTime + fraction * dt;
+      car.finishTime = car.isPlayer
+        ? Math.max(0, car.rawFinishTime - this.stuntCredit)
+        : car.rawFinishTime;
+      car.speed = 0;
+      this.finishOrder.push(car);
+    });
+    if (this.player.finished) this.endRace(false);
+  }
+
   positionOf(car) {
+    if (car.finished) {
+      const finishIndex = this.finishOrder.indexOf(car);
+      if (finishIndex >= 0) return finishIndex + 1;
+    }
     let pos = 1;
     this.cars.forEach((o) => { if (o !== car && o.s > car.s) pos++; });
     return pos;
@@ -933,19 +1064,33 @@ export class Race {
       racer: c.racer,
       isPlayer: c.isPlayer,
       finished: c.finished,
-      time: c.finished ? c.finishTime
-        : this.raceTime + Math.max(0, this.track.length - c.s) / Math.max(24, c.racer.topSpeed * 0.85),
+      time: c.finished ? c.finishTime : null,
       dist: c.s,
-    })).sort((x, y) => y.dist - x.dist);
+      finishRank: c.finished ? this.finishOrder.indexOf(c) : -1,
+    })).sort((x, y) => {
+      if (x.finished !== y.finished) return x.finished ? -1 : 1;
+      if (x.finished) {
+        const xr = x.finishRank < 0 ? Number.MAX_SAFE_INTEGER : x.finishRank;
+        const yr = y.finishRank < 0 ? Number.MAX_SAFE_INTEGER : y.finishRank;
+        return xr - yr || x.time - y.time;
+      }
+      return y.dist - x.dist;
+    });
+    results.forEach((row) => { delete row.finishRank; });
     this.onEvent('finish', {
       place,
       timeUp,
-      raceTime: this.raceTime,
+      raceTime: this.player.finished ? this.player.rawFinishTime : this.raceTime,
+      officialTime: this.player.finished
+        ? this.player.finishTime
+        : Math.max(0, this.raceTime - this.stuntCredit),
+      stuntCredit: this.stuntCredit,
       beans: this.player.beansGot,
       stunts: this.player.stuntsLanded,
       results,
     });
     audio.finish(place === 1 && !timeUp);
+    audio.announce(timeUp ? 'Time is up!' : place === 1 ? 'First place!' : `${place} place!`);
   }
 
   // ---------------- visuals ----------------
@@ -954,9 +1099,12 @@ export class Race {
     this.cars.forEach((car) => {
       car.worldPos(this.tmpV);
       car.group.position.copy(this.tmpV);
+      const bumperHidden = car.isPlayer && !this.demo && this.cameraMode === 2;
+      car.mesh.visible = !bumperHidden;
+      car.shadow.visible = !bumperHidden;
 
-      // Multi-angle sprite: pick front/rear + mirror from the relative
-      // bearing between the car's heading and the camera.
+      // Pick the straight front/rear frame from the relative bearing between
+      // the car's heading and the camera.
       const heading = (car.mode === 'shortcut' && this.track.shortcut)
         ? Math.atan2(this.track.shortcut.frameAt(car.ss).tan.x, this.track.shortcut.frameAt(car.ss).tan.z)
         : this.track.headingAt(car.s);
@@ -971,18 +1119,20 @@ export class Race {
         car.mesh.material.map = showFront ? car.frontT : car.rearT;
         car.mesh.material.needsUpdate = true;
       }
-      // Mirror to fake the opposite 3/4 angle (sprites are drawn from the left).
+      // Mirror only switches small asymmetric details such as the driver seat;
+      // the body silhouette itself remains centered and road-aligned.
       const mirror = (showFront ? rel < 0 : rel > 0) ? -1 : 1;
       car.mesh.scale.set(mirror * car.visualScale, car.visualScale, car.visualScale);
 
-      // Billboard yaw + steering lean baked in.
+      // Billboard yaw only. The old code added up to 20 degrees of steering
+      // yaw on top of already-angled raster art, which made every car look as
+      // if it were permanently crab-walking across the road.
       const yaw = toCam;
-      const steerTwist = THREE.MathUtils.clamp(car.lean * -1.6, -0.35, 0.35);
-      car.mesh.rotation.y = yaw + steerTwist + (car.spinT > 0 ? car.spinYaw : 0);
+      car.mesh.rotation.y = yaw + (car.spinT > 0 ? car.spinYaw : 0);
 
       // Pitch/roll from stunts.
       let pitch = 0;
-      let roll = car.lean;
+      let roll = THREE.MathUtils.clamp(car.lean * 0.28, -0.05, 0.05);
       if (car.wheelieT > 0 || car.aiWheelieT > 0) {
         const full = car.isPlayer ? (car.wheelieFullT || WHEELIE_TIME) : 1.2;
         const t = car.isPlayer ? car.wheelieT : car.aiWheelieT;
@@ -1013,6 +1163,7 @@ export class Race {
       if (!v.group.visible) return;
       const p = v.group.position;
       v.mesh.rotation.y = Math.atan2(camPos.x - p.x, camPos.z - p.z);
+      v.mesh.rotation.z = v.crashT > 0 ? Math.sin(v.crashSpin) * 0.22 : 0;
       v.shadow.position.y = 0.06;
     });
     this.animals.forEach((a) => {
@@ -1020,41 +1171,60 @@ export class Race {
       const p = a.group.position;
       a.mesh.rotation.y = Math.atan2(camPos.x - p.x, camPos.z - p.z);
     });
+    this.track.orientLandmarks(camPos);
 
     this.shake = Math.max(0, this.shake - dt * 2.1);
   }
 
   updateCamera(dt) {
     const car = this.player;
+    const mode = this.cameraMode;
     let anchorPos;
     let lookPos;
     if (car.mode === 'shortcut' && this.track.shortcut) {
       const sc = this.track.shortcut;
-      const back = sc.frameAt(Math.max(0, car.ss - 8.4));
-      anchorPos = back.pos.clone().addScaledVector(back.left, (car.sx || 0) * 0.5);
-      const ahead = sc.frameAt(Math.min(sc.len, car.ss + 14));
+      const backDist = mode === 0 ? 14 : mode === 1 ? 9 : -1.2;
+      const aheadDist = mode === 0 ? 30 : mode === 1 ? 23 : 44;
+      const backS = car.ss - backDist;
+      const back = sc.frameAt(Math.max(0, backS));
+      anchorPos = back.pos.clone().addScaledVector(back.left, car.sx || 0);
+      if (backS < 0) anchorPos.addScaledVector(back.tan, backS);
+      const ahead = sc.frameAt(Math.min(sc.len, car.ss + aheadDist));
       lookPos = ahead.pos.clone();
     } else {
-      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 5.3)), car.x * 0.68);
-      lookPos = this.track.worldPos(car.s + 16, car.x * 0.3);
+      const backDist = this.demo ? 15 : mode === 0 ? 13.5 : mode === 1 ? 8.5 : -1.2;
+      const aheadDist = this.demo ? 24 : mode === 0 ? 34 : mode === 1 ? 24 : 46;
+      const laneX = this.demo ? car.x * 0.75 : car.x;
+      const backS = car.s - backDist;
+      anchorPos = this.track.worldPos(Math.max(0, backS), laneX);
+      if (backS < 0) anchorPos.addScaledVector(this.track.frameAt(0).tan, backS);
+      lookPos = this.track.worldPos(car.s + aheadDist, laneX);
     }
-    const camY = anchorPos.y + (this.demo ? 6.4 : 2.85) + car.yOff * 0.45;
+    const camLift = this.demo ? 6.4 : mode === 0 ? 8.25 : mode === 1 ? 4.7 : 1.65;
+    const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
       this.camInit = true;
     } else {
-      this.camera.position.lerp(this.tmpV2.set(anchorPos.x, camY, anchorPos.z), Math.min(1, 7.5 * dt));
+      this.camera.position.lerp(this.tmpV2.set(anchorPos.x, camY, anchorPos.z), Math.min(1, 5.8 * dt));
     }
     if (this.shake > 0.01) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.55;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.4;
     }
-    lookPos.y += 2.2 + car.yOff * 0.3;
+    lookPos.y += (mode === 2 ? 1.45 : 1.25) + car.yOff * 0.25;
     this.camera.lookAt(lookPos);
     const speed01 = Math.min(1, car.speed / 66);
-    const targetFov = (this.demo ? 62 : 70) + speed01 * 10 + (car.wheelieT > 0 ? 6 : 0);
+    const baseFov = this.demo ? 62 : mode === 0 ? 66 : mode === 1 ? 68 : 72;
+    const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0);
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, 5 * dt);
     this.camera.updateProjectionMatrix();
+  }
+
+  cycleCamera() {
+    this.cameraMode = (this.cameraMode + 1) % this.cameraModes.length;
+    this.camInit = false;
+    return this.cameraModes[this.cameraMode];
   }
 
   hud() {
@@ -1074,6 +1244,9 @@ export class Race {
       stage: this.opts.trackDef.name,
       zone: this.track.zoneOf(car.s).replaceAll('_', ' ').toUpperCase(),
       comeback: car.recoveryT > 0,
+      camera: this.cameraModes[this.cameraMode],
+      officialTime: Math.max(0, this.raceTime - this.stuntCredit),
+      stuntCredit: this.stuntCredit,
     };
   }
 

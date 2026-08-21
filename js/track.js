@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=world-pass-2';
+import * as tex from './tex.js?v=world-pass-3';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -36,6 +36,7 @@ export class Track {
   constructor(def) {
     this.def = def;
     this.group = new THREE.Group();
+    this.billboardLandmarks = [];
 
     const pts = buildCenterline(def.segments);
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.4);
@@ -62,6 +63,24 @@ export class Track {
       return r;
     });
     const totalDef = acc;
+    this.crests = [];
+    let boundary = 0;
+    for (let i = 0; i < def.segments.length - 1; i++) {
+      const current = def.segments[i];
+      const next = def.segments[i + 1];
+      boundary += current.len;
+      const incomingSlope = (current.dh || 0) / current.len;
+      const outgoingSlope = (next.dh || 0) / next.len;
+      const slopeDrop = incomingSlope - outgoingSlope;
+      // Positive grade breaking sharply flatter/downhill forms a physical
+      // road crest. These are separate from the visible wooden ramps.
+      if (incomingSlope > 0.002 && slopeDrop > 0.003) {
+        this.crests.push({
+          s: (boundary / totalDef) * this.length,
+          strength: THREE.MathUtils.clamp(slopeDrop * 70, 0.5, 1.4),
+        });
+      }
+    }
     for (let i = 0; i <= n; i++) {
       const s = (i / n) * this.length;
       const sDef = (s / this.length) * totalDef;
@@ -329,7 +348,7 @@ export class Track {
         const facePlayer = isSign || kind === 'building_surf' ? Math.PI : 0;
         const angle = Math.atan2(f.tan.x, f.tan.z) + facePlayer
           + (Math.random() - 0.5) * (facePlayer ? 0.2 : 0.5)
-          + (isSign ? (side > 0 ? 0.45 : -0.45) : 0);
+          + (isSign ? (side > 0 ? -0.35 : 0.35) : 0);
         if (!placements.has(kind)) placements.set(kind, []);
         placements.get(kind).push({ p, angle });
       }
@@ -369,6 +388,8 @@ export class Track {
     if (kind === 'mesaBig') return tex.mesaBigTexture();
     if (kind === 'dinerSign') return tex.dinerSignTexture();
     if (kind === 'townGate') return tex.townGateTexture();
+    if (kind === 'alohaGate') return tex.alohaGateTexture();
+    if (kind === 'route66Gate') return tex.route66GateTexture();
     if (kind === 'church') return tex.churchTexture();
     if (kind === 'fountain') return tex.fountainTexture();
     if (kind === 'cantinaNeon') return tex.cantinaNeonTexture();
@@ -381,8 +402,8 @@ export class Track {
       const s = lm.at * this.length;
       const f = this.frameAt(s);
       const p = f.pos.clone().addScaledVector(f.left, lm.x);
-      const isGate = lm.kind === 'townGate';
-      const hasText = ['townGate', 'dinerSign', 'cantinaNeon'].includes(lm.kind);
+      const isGate = ['townGate', 'alohaGate', 'route66Gate'].includes(lm.kind);
+      const hasText = ['townGate', 'alohaGate', 'route66Gate', 'dinerSign', 'cantinaNeon'].includes(lm.kind);
       const mat = new THREE.MeshBasicMaterial({
         map: this.landmarkTexture(lm.kind),
         transparent: true, alphaTest: 0.35,
@@ -393,15 +414,23 @@ export class Track {
       m.position.set(p.x, p.y + lm.h / 2 - 0.4 + (lm.kind === 'cruiseShip' ? -2 : 0), p.z);
       // Face approaching drivers; angle far-off landmarks slightly.
       m.rotation.y = this.headingAt(s) + Math.PI
-        + (isGate || Math.abs(lm.x) < 60 ? 0 : 0.55 * (lm.x > 0 ? 1 : -1));
+        + (isGate || Math.abs(lm.x) < 60 ? 0 : 0.55 * (lm.x > 0 ? -1 : 1));
       this.group.add(m);
+      // Large image-only postcard landmarks face the chase camera. Fixed
+      // planes went edge-on on winding approaches, making Hawaii read as
+      // generic palms until the landmark was already behind the player.
+      if (!hasText && !isGate) this.billboardLandmarks.push(m);
     });
   }
 
-  buildArchAt(s, label, bg, fg) {
-    const f = this.frameAt(s);
+  orientLandmarks(cameraPos) {
+    this.billboardLandmarks.forEach((m) => {
+      m.rotation.y = Math.atan2(cameraPos.x - m.position.x, cameraPos.z - m.position.z);
+    });
+  }
+
+  buildArchFrame(f, heading, label, bg, fg, half = ROAD_HALF + 2) {
     const group = new THREE.Group();
-    const half = ROAD_HALF + 2;
     const pillarGeo = new THREE.BoxGeometry(1.8, 10, 1.8);
     const pillarMat = new THREE.MeshBasicMaterial({ color: '#c9c9d4' });
     [half, -half].forEach((off) => {
@@ -415,10 +444,14 @@ export class Track {
       new THREE.MeshBasicMaterial({ map: tex.archTexture(label, bg, fg), side: THREE.FrontSide }),
     );
     banner.position.set(f.pos.x, f.pos.y + 11.6, f.pos.z);
-    banner.rotation.y = this.headingAt(s) + Math.PI;
+    banner.rotation.y = heading + Math.PI;
     group.add(banner);
     this.group.add(group);
     return group;
+  }
+
+  buildArchAt(s, label, bg, fg) {
+    return this.buildArchFrame(this.frameAt(s), this.headingAt(s), label, bg, fg);
   }
 
   buildArches() {
@@ -601,6 +634,22 @@ export class Track {
         };
       },
     };
+    this.buildShortcutCheckpoints();
+  }
+
+  buildShortcutCheckpoints() {
+    this.branchCheckpoints = [];
+    if (!this.shortcut) return;
+    const sc = this.shortcut;
+    this.checkpoints.filter((cp) => cp > sc.s1 && cp < sc.s2).forEach((cp) => {
+      // Player virtual progress is linear in shortcut arc length, so place the
+      // branch banner at the exact physical point where the clock bonus fires.
+      const ss = ((cp - sc.s1) / (sc.s2 - sc.s1)) * sc.len;
+      const f = sc.frameAt(ss);
+      const heading = Math.atan2(f.tan.x, f.tan.z);
+      this.buildArchFrame(f, heading, 'CHECKPOINT', '#7c3fa0', '#ffd23d', 6.2);
+      this.branchCheckpoints.push({ cp, ss });
+    });
   }
 
   buildShimmer() {

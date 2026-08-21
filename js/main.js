@@ -1,25 +1,51 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=world-pass-2';
-import { Race } from './game.js?v=world-pass-2';
-import { Input } from './input.js?v=world-pass-2';
-import { audio } from './audio.js?v=world-pass-2';
-import { rivalRearTexture } from './tex.js?v=world-pass-2';
+import { RACERS, RIVALS, STAGES } from './data.js?v=world-pass-3';
+import { Race } from './game.js?v=world-pass-3';
+import { Input } from './input.js?v=world-pass-3';
+import { audio } from './audio.js?v=world-pass-3';
+import { rivalRearTexture } from './tex.js?v=world-pass-3';
+
+const seedParam = Number(new URLSearchParams(location.search).get('seed'));
+if (Number.isFinite(seedParam) && seedParam > 0) {
+  let seededState = seedParam >>> 0;
+  Math.random = () => {
+    seededState = (Math.imul(seededState, 1664525) + 1013904223) >>> 0;
+    return seededState / 0x100000000;
+  };
+}
 
 const $ = (sel) => document.querySelector(sel);
 
 const canvas = $('#game');
-const renderer = new THREE.WebGLRenderer({
-  canvas, antialias: false, powerPreference: 'high-performance', stencil: false,
-});
-renderer.setPixelRatio(1);
+let renderer;
+let webglAvailable = true;
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas, antialias: false, powerPreference: 'high-performance', stencil: false,
+  });
+  renderer.setPixelRatio(1);
+} catch (error) {
+  // Keep menus usable and surface a clear failure instead of leaving a black
+  // page when a locked-down browser disables WebGL.
+  webglAvailable = false;
+  document.body.classList.add('no-webgl');
+  renderer = {
+    setSize(w, h) { canvas.width = w; canvas.height = h; },
+    setPixelRatio() {},
+    render() {},
+  };
+  console.warn('CRUIS\'N BEANS: WebGL unavailable; menus remain active.', error);
+}
 
 const input = new Input();
 input.bindSteerSurface($('#steer-surface'));
 input.bindHoldButton($('#btn-brake'), 'brake');
 input.bindGasPad($('#btn-gas'));
 
-let renderScale = 0.72;
+const desktopQuality = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const maxRenderScale = desktopQuality ? 1 : 0.78;
+let renderScale = maxRenderScale;
 let race = null;
 let mode = 'title';
 let chosenRacer = 0;
@@ -81,7 +107,7 @@ const artUrls = [...new Set(RACERS.flatMap((racer) => [
   racer.portrait, racer.carSprite, racer.rearSprite, racer.frontSprite,
 ]))];
 
-function loadArt(url) {
+function loadArt(url, attempt = 0) {
   return new Promise((resolve) => {
     const image = new Image();
     image.onload = async () => {
@@ -89,14 +115,22 @@ function loadArt(url) {
       resolve(true);
     };
     image.onerror = () => resolve(false);
-    image.src = url;
+    image.src = attempt > 0 ? `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}` : url;
   });
 }
 
-Promise.all(artUrls.map(loadArt)).then((loaded) => {
-  startBtn.disabled = false;
-  startBtn.textContent = loaded.every(Boolean) ? 'PRESS START' : 'PRESS START — ART RETRYING';
-});
+async function gateRacerArt(attempt = 0) {
+  const loaded = await Promise.all(artUrls.map((url) => loadArt(url, attempt)));
+  if (loaded.every(Boolean)) {
+    startBtn.disabled = false;
+    startBtn.textContent = 'PRESS START';
+    return;
+  }
+  startBtn.disabled = true;
+  startBtn.textContent = 'LOADING DRIVER ART...';
+  setTimeout(() => gateRacerArt(attempt + 1), 1400);
+}
+gateRacerArt();
 
 // ---------- title ----------
 startBtn.addEventListener('click', () => {
@@ -146,7 +180,8 @@ function buildStageCards() {
       <div class="card-name">${t.name}</div>
       <div class="track-art track-art-${t.id}"></div>
       <div class="card-tag">${t.blurb}</div>
-      <div class="card-tag small">POINT TO POINT \u2022 BEAT THE CLOCK</div>`;
+      <div class="card-tag small">POINT TO POINT \u2022 7-CAR FIELD</div>
+      <div class="card-tag target">TARGET ${t.targetTime}</div>`;
     card.addEventListener('click', () => {
       chosenStage = i;
       audio.beep(880, 0.12, 'square', 0.25);
@@ -186,7 +221,27 @@ function showCount(txt, cls) {
   setTimeout(() => countEl.classList.remove('show'), 850);
 }
 
+const checkpointFlash = $('#checkpoint-flash');
+let checkpointTimer = 0;
+function showCheckpoint(data) {
+  $('#checkpoint-count').textContent = `CHECKPOINT ${data.index}/${data.total}`;
+  $('#checkpoint-bonus').textContent = `+${data.bonus} SECONDS`;
+  checkpointFlash.classList.remove('show');
+  void checkpointFlash.offsetWidth;
+  checkpointFlash.classList.add('show');
+  clearTimeout(checkpointTimer);
+  checkpointTimer = setTimeout(() => checkpointFlash.classList.remove('show'), 1400);
+  audio.announce(`Checkpoint ${data.index}! ${data.bonus} seconds!`);
+}
+
 function startRace() {
+  if (!webglAvailable) {
+    const warning = $('#webgl-warning');
+    warning.classList.remove('attention');
+    void warning.offsetWidth;
+    warning.classList.add('attention');
+    return false;
+  }
   if (race) race.dispose();
   audio.stopMusic();
   // ?time=N overrides the starting clock (testing). ?short=1 starts near the end.
@@ -206,6 +261,7 @@ function startRace() {
   }
   race.camera.aspect = window.innerWidth / window.innerHeight;
   race.camera.updateProjectionMatrix();
+  $('#btn-camera small').textContent = 'HIGH';
   show('race');
   audio.startEngine();
 
@@ -227,7 +283,10 @@ function onRaceEvent(kind, data) {
     showCount('GO!!', 'go');
     audio.countdownBeep(true);
     audio.startMusic('race');
+    audio.announce('Go, go, go!');
     $('#hint').classList.remove('show');
+  } else if (kind === 'checkpoint') {
+    showCheckpoint(data);
   } else if (kind === 'toast') {
     toast(data);
   } else if (kind === 'rivalPass') {
@@ -260,7 +319,12 @@ function showResults(data) {
   }
   $('#results-sub').textContent = data.timeUp
     ? 'THE ROAD WON THIS TIME...'
-    : `TIME ${fmtTime(data.raceTime)} \u2022 STUNTS ${data.stunts} \u2022 BEANS ${data.beans}`;
+    : `OFFICIAL ${fmtTime(data.officialTime)}${data.stuntCredit > 0 ? ` \u2022 STUNT CUT -${data.stuntCredit.toFixed(1)}s` : ''} \u2022 STUNTS ${data.stunts} \u2022 BEANS ${data.beans}`;
+  const finaleGag = $('#finale-gag');
+  if (data.timeUp) finaleGag.textContent = 'THE BEAN COUNCIL DEMANDS A REMATCH.';
+  else if (RACERS[chosenRacer].id === 'elon') finaleGag.textContent = 'ELON MISSED THE MOON EXIT. BEANS DELIVERED.';
+  else if (RACERS[chosenRacer].id === 'lance') finaleGag.textContent = 'LANCE BROUGHT THE VAN HOME IN STYLE.';
+  else finaleGag.textContent = data.place === 1 ? 'THE BEAN COUNCIL APPROVES.' : 'POSTCARD ACQUIRED. DIGNITY OPTIONAL.';
   const list = $('#results-list');
   list.innerHTML = '';
   data.results.forEach((r, i) => {
@@ -271,7 +335,7 @@ function showResults(data) {
       <span class="rpos">${PLACE_NAMES[i]}</span>
       <img src="${img}" alt="${r.racer.name}">
       <span class="rname">${r.racer.name}</span>
-      <span class="rtime">${r.finished ? fmtTime(r.time) : (data.timeUp && r.isPlayer ? 'DNF' : fmtTime(r.time))}</span>`;
+      <span class="rtime">${r.finished ? fmtTime(r.time) : 'DNF'}</span>`;
     list.appendChild(row);
   });
   show('results');
@@ -299,7 +363,20 @@ muteBtn.addEventListener('click', () => {
   paintMute();
 });
 window.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() === 'm') { audio.toggleMuted(); paintMute(); }
+  const key = e.key.toLowerCase();
+  if (key === 'm') { audio.toggleMuted(); paintMute(); }
+  if (key === 'c' && race && mode === 'race') {
+    const cameraName = race.cycleCamera();
+    toast(cameraName);
+    $('#btn-camera small').textContent = cameraName.replace(' CHASE', '');
+  }
+});
+
+$('#btn-camera').addEventListener('click', () => {
+  if (!race || mode !== 'race') return;
+  const cameraName = race.cycleCamera();
+  toast(cameraName);
+  $('#btn-camera small').textContent = cameraName.replace(' CHASE', '');
 });
 paintMute();
 
@@ -359,7 +436,10 @@ function loop(now) {
   if (fpsT > 2 && fpsN > 10) {
     const avg = fpsN / fpsAcc;
     if (avg < 45 && renderScale > 0.5) { renderScale -= 0.1; resize(); }
-    else if (avg > 57 && renderScale < 0.72) { renderScale += 0.05; resize(); }
+    else if (avg > 57 && renderScale < maxRenderScale) {
+      renderScale = Math.min(maxRenderScale, renderScale + 0.05);
+      resize();
+    }
     fpsAcc = 0; fpsN = 0; fpsT = 0;
   }
 
@@ -377,5 +457,34 @@ resize();
 show('title');
 requestAnimationFrame(loop);
 
-// Debug handle for automated tests.
-window.__cb = { get race() { return race; }, input, startRace: (r, s) => { chosenRacer = r; chosenStage = s; startRace(); } };
+// Debug handle for deterministic acceptance tests and evidence capture.
+window.__cb = {
+  get race() { return race; },
+  get webglAvailable() { return webglAvailable; },
+  input,
+  startRace: (r, s) => { chosenRacer = r; chosenStage = s; startRace(); },
+  scenario(name) {
+    if (!race || mode !== 'race') return false;
+    const p = race.player;
+    race.state = 'race';
+    if (name === 'wheelie') {
+      const truck = race.traffic.find((v) => v.wrongWay);
+      p.speed = 54; p.x = 6; p.wheelieT = 1.4; p.wheelieFullT = 1.9;
+      truck.s = p.s + 20; truck.x = 6; truck.clearedBy = 0; truck.crashT = 0;
+      return true;
+    }
+    if (name === 'pileup') {
+      const truck = race.traffic.find((v) => v.wrongWay);
+      p.speed = 55; p.x = 6; p.wheelieT = 0; p.invuln = 0;
+      truck.s = p.s + 1; truck.x = 6; truck.clearedBy = 0; truck.crashT = 0;
+      return true;
+    }
+    if (name === 'checkpoint') {
+      const cp = race.track.checkpoints[race.nextCheckpoint];
+      if (cp === undefined) return false;
+      p.s = cp - 12; p.speed = 58; race.timeLeft = 3.2;
+      return true;
+    }
+    return false;
+  },
+};

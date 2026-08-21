@@ -39,6 +39,20 @@ class AudioBox {
     return this.muted;
   }
 
+  announce(line) {
+    // Short, deliberately corny cabinet calls. Speech is optional; browsers
+    // without speech synthesis still retain every visual cue and synth SFX.
+    if (this.muted || !line || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+    const now = performance.now();
+    if (this.lastAnnounce && now - this.lastAnnounce < 650) return;
+    this.lastAnnounce = now;
+    const voice = new window.SpeechSynthesisUtterance(line);
+    voice.rate = 1.06;
+    voice.pitch = 0.72;
+    voice.volume = 0.82;
+    window.speechSynthesis.speak(voice);
+  }
+
   // ---- one-shots ----
   beep(freq, dur = 0.14, type = 'square', vol = 0.25) {
     if (!this.ensure()) return;
