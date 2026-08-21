@@ -324,8 +324,12 @@ export class Track {
         }
         const f = this.frameAt(s + Math.random() * baseStep * 0.5);
         const p = f.pos.clone().addScaledVector(f.left, side * dist);
-        const angle = Math.atan2(f.tan.x, f.tan.z) + (Math.random() - 0.5) * 0.5
-          + (isSign ? (side > 0 ? -0.45 : 0.45) : 0);
+        // Text props face back toward approaching drivers (+PI), tilted
+        // slightly toward the road.
+        const facePlayer = isSign || kind === 'building_surf' ? Math.PI : 0;
+        const angle = Math.atan2(f.tan.x, f.tan.z) + facePlayer
+          + (Math.random() - 0.5) * (facePlayer ? 0.2 : 0.5)
+          + (isSign ? (side > 0 ? 0.45 : -0.45) : 0);
         if (!placements.has(kind)) placements.set(kind, []);
         placements.get(kind).push({ p, angle });
       }
@@ -334,8 +338,11 @@ export class Track {
     // Merge per kind in spatial chunks of ~500 units for frustum culling.
     placements.forEach((list, kind) => {
       const [t, w, h] = this.propTexture(kind);
+      // Text-bearing props are single-sided so their text never mirrors.
+      const hasText = kind.startsWith('sign_') || kind === 'building_surf';
       const mat = new THREE.MeshBasicMaterial({
-        map: t, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide,
+        map: t, transparent: true, alphaTest: 0.4,
+        side: hasText ? THREE.FrontSide : THREE.DoubleSide,
       });
       const chunks = new Map();
       list.forEach((item) => {
@@ -382,8 +389,9 @@ export class Track {
       });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(lm.w, lm.h), mat);
       m.position.set(p.x, p.y + lm.h / 2 - 0.4 + (lm.kind === 'cruiseShip' ? -2 : 0), p.z);
-      m.rotation.y = this.headingAt(s) + (isGate || Math.abs(lm.x) < 60 ? 0 : Math.PI / 2 * (lm.x > 0 ? -1 : 1) * 0.35);
-      if (isGate) m.rotation.y = this.headingAt(s);
+      // Face approaching drivers; angle far-off landmarks slightly.
+      m.rotation.y = this.headingAt(s) + Math.PI
+        + (isGate || Math.abs(lm.x) < 60 ? 0 : 0.55 * (lm.x > 0 ? 1 : -1));
       this.group.add(m);
     });
   }
@@ -405,7 +413,7 @@ export class Track {
       new THREE.MeshBasicMaterial({ map: tex.archTexture(label, bg, fg), side: THREE.DoubleSide }),
     );
     banner.position.set(f.pos.x, f.pos.y + 11.6, f.pos.z);
-    banner.rotation.y = this.headingAt(s);
+    banner.rotation.y = this.headingAt(s) + Math.PI;
     group.add(banner);
     this.group.add(group);
     return group;
@@ -551,7 +559,7 @@ export class Track {
     );
     const sp = this.worldPos(s1 - 26, side * (ROAD_HALF + 6));
     sign.position.set(sp.x, sp.y + 5, sp.z);
-    sign.rotation.y = this.headingAt(s1 - 26);
+    sign.rotation.y = this.headingAt(s1 - 26) + Math.PI;
     this.group.add(sign);
 
     this.shortcut = {

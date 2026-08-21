@@ -362,8 +362,9 @@ export class Race {
       } else if (car.grounded && car.wheelieT <= 0 && car.wheelieCooldown <= 0
         && car.spinT <= 0 && car.speed > 16 && this.state === 'race') {
         // WHEELIE: the World-style double-tap turbo.
-        car.wheelieT = WHEELIE_TIME * (0.8 + r.stats.wheelie * 0.4);
-        car.wheelieCooldown = 2.4;
+        car.wheelieFullT = WHEELIE_TIME * (0.8 + r.stats.wheelie * 0.4);
+        car.wheelieT = car.wheelieFullT;
+        car.wheelieCooldown = 2.0;
         audio.wheelie();
         audio.startFart();       // the joke exhaust
         setTimeout(() => audio.stopFart(), 700);
@@ -459,12 +460,17 @@ export class Race {
 
     this.advance(car, dt);
 
-    // Wheelie exhaust gag puffs.
-    if (wheelie && Math.random() < dt * 30) {
-      car.worldPos(this.tmpV);
+    // Wheelie exhaust gag puffs, spawned behind the car so the camera sees them.
+    if (wheelie) {
       const f = this.track.frameAt(car.s);
-      this.tmpV.y += 0.8 + car.yOff;
-      this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 7, z: -f.tan.z * 7 });
+      car.worldPos(this.tmpV);
+      this.tmpV.x -= f.tan.x * 3.2;
+      this.tmpV.z -= f.tan.z * 3.2;
+      this.tmpV.y += 0.7 + car.yOff;
+      const n = Math.random() < dt * 40 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 8, z: -f.tan.z * 8 }, 1.1);
+      }
     }
 
     // ---- bean cans: joke flavor, tiny time treats ----
@@ -635,21 +641,24 @@ export class Race {
         audio.honk();
       }
 
+      // LEAPFROG: an active wheelie near an oncoming vehicle launches you
+      // over it — generous window so the move is landable at closing speed.
+      if (isPlayer && car.wheelieT > 0 && car.grounded && v.oncoming
+        && v.clearedBy !== car && ds > -2 && ds < 26 && Math.abs(v.x - car.x) < 3.4) {
+        v.clearedBy = car;
+        car.grounded = false;
+        car.vy = 15;
+        car.airTime = 0;
+        car.stuntsLanded++;
+        this.timeLeft += 1;
+        audio.bigAir();
+        this.onEvent('toast', 'LEAPFROG! +1s');
+        return;
+      }
+
       const hitW = car.twoWheelT > 0 ? 1.7 : 3.1;
       if (absDs < (v.w + 3) * 0.62 && Math.abs(v.x - car.x) < hitW && car.yOff < v.h * 0.75) {
         if (v.clearedBy === car) return;
-        if (isPlayer && car.wheelieT > 0 && car.grounded) {
-          // LEAPFROG: wheelie over the roof, World style.
-          v.clearedBy = car;
-          car.grounded = false;
-          car.vy = 15;
-          car.airTime = 0;
-          car.stuntsLanded++;
-          this.timeLeft += 1;
-          audio.bigAir();
-          this.onEvent('toast', 'LEAPFROG! +1s');
-          return;
-        }
         if (car.invuln > 0) return;
         v.clearedBy = car;
         if (isPlayer) {
@@ -897,9 +906,12 @@ export class Race {
       let pitch = 0;
       let roll = car.lean;
       if (car.wheelieT > 0 || car.aiWheelieT > 0) {
+        const full = car.isPlayer ? (car.wheelieFullT || WHEELIE_TIME) : 1.2;
         const t = car.isPlayer ? car.wheelieT : car.aiWheelieT;
-        const k = Math.min(1, t / 0.4) * Math.min(1, (WHEELIE_TIME - t + 0.15) / 0.3 + 0.2);
-        pitch = -0.5 * Math.min(1, k);
+        const elapsed = full - t;
+        // Nose snaps up fast, holds, and settles as the wheelie ends.
+        const k = Math.min(1, elapsed / 0.22) * Math.min(1, t / 0.3);
+        pitch = -0.58 * Math.max(0, k);
       }
       if (car.flipping) {
         if (car.flipAxis === 'x') pitch = -car.flipProg;
@@ -945,10 +957,10 @@ export class Race {
       const ahead = sc.frameAt(Math.min(sc.len, car.ss + 14));
       lookPos = ahead.pos.clone();
     } else {
-      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 8.4)), car.x * 0.55);
+      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 7.8)), car.x * 0.55);
       lookPos = this.track.worldPos(car.s + 14, car.x * 0.3);
     }
-    const camY = anchorPos.y + (this.demo ? 6.4 : 3.9) + car.yOff * 0.45;
+    const camY = anchorPos.y + (this.demo ? 6.4 : 3.6) + car.yOff * 0.45;
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
       this.camInit = true;

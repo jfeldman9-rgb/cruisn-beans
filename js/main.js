@@ -182,6 +182,7 @@ function onRaceEvent(kind, data) {
   if (kind === 'count') {
     showCount(String(data));
     audio.countdownBeep(false);
+    if (data <= 2) $('#hint').classList.remove('show'); // clear stage for the countdown
   } else if (kind === 'go') {
     showCount('GO!!', 'go');
     audio.countdownBeep(true);
