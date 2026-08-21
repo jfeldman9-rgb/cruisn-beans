@@ -190,6 +190,20 @@ html, body {
   border-radius: 4px;
 }
 
+#hud-location {
+  position: absolute;
+  top: calc(max(1vh, env(safe-area-inset-top)) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: clamp(9px, 1.8vh, 14px);
+  letter-spacing: 2px;
+  text-shadow: 0 2px 0 #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#hud-location small { color: var(--yellow); margin-left: 0.8em; }
+
 #hud-beans-box {
   position: absolute; top: calc(max(1vh, env(safe-area-inset-top)) + 18px);
   left: max(2vw, env(safe-area-inset-left));
@@ -257,6 +271,39 @@ html, body {
   letter-spacing: 2px;
 }
 #toast.show { opacity: 1; }
+
+#danger-alert {
+  position: absolute;
+  top: 27%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-2deg) scale(0.8);
+  color: #fff;
+  background: rgba(190, 20, 20, 0.88);
+  border: 4px solid var(--yellow);
+  border-radius: 12px;
+  padding: 1vh 2.2vw;
+  font-size: clamp(18px, 5vh, 38px);
+  line-height: 1;
+  letter-spacing: 2px;
+  text-shadow: 0 3px 0 #650000;
+  box-shadow: 0 0 24px rgba(255, 40, 30, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.08s, transform 0.08s;
+}
+#danger-alert small {
+  display: block;
+  margin-top: 0.7vh;
+  color: var(--yellow);
+  font-size: 0.42em;
+}
+#danger-alert.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(-2deg) scale(1);
+  animation: danger-pulse 0.45s steps(2) infinite;
+}
+@keyframes danger-pulse {
+  50% { filter: brightness(1.45); }
+}
 
 #hint {
   position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) rotate(-2deg);

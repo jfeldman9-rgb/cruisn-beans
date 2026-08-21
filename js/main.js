@@ -29,6 +29,7 @@ let fpsN = 0;
 let fpsT = 0;
 let hintShown = false;
 let musicStarted = false;
+let lastClockBeep = -1;
 
 // Rival portraits are generated from their canvas car sprites.
 const rivalPortraits = new Map();
@@ -280,10 +281,13 @@ const hudPos = $('#hud-pos');
 const hudMph = $('#hud-mph');
 const hudBeans = $('#hud-beans');
 const hudProgress = $('#hud-progress-fill');
+const hudLocation = $('#hud-location');
+const dangerAlert = $('#danger-alert');
 
 function paintHUD() {
   const h = race.hud();
-  hudTime.textContent = Math.ceil(h.timeLeft);
+  const clockSecond = Math.ceil(h.timeLeft);
+  hudTime.textContent = clockSecond;
   hudTime.classList.toggle('low', h.timeLeft < 8);
   hudCp.textContent = `CP ${h.cp}/${h.cps}`;
   hudPos.textContent = `${PLACE_NAMES[h.place - 1]}/${h.total}`;
@@ -291,6 +295,16 @@ function paintHUD() {
   hudBeans.textContent = `\u00d7${h.beans}`;
   hudProgress.style.width = `${(h.progress * 100).toFixed(1)}%`;
   $('#btn-gas').classList.toggle('active', h.wheelie);
+  hudLocation.innerHTML = `${h.stage} <small>${h.zone}</small>`;
+  dangerAlert.classList.toggle('show', h.danger);
+  document.body.classList.toggle('comeback', h.comeback);
+
+  if (clockSecond <= 8 && clockSecond !== lastClockBeep) {
+    lastClockBeep = clockSecond;
+    audio.beep(clockSecond <= 3 ? 880 : 660, 0.12, 'square', 0.24);
+  } else if (clockSecond > 8) {
+    lastClockBeep = -1;
+  }
 }
 
 // ---------- main loop ----------

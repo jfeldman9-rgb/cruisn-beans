@@ -549,18 +549,34 @@ export class Track {
     geo.computeBoundingSphere();
     this.group.add(new THREE.Mesh(geo, mat));
 
-    // Entrance sign.
+    // Oversized entrance sign plus three chevrons: shortcuts should be a
+    // readable route choice at speed, not a secret pixel hunt.
     const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(11, 7),
+      new THREE.PlaneGeometry(19, 10),
       new THREE.MeshBasicMaterial({
-        map: tex.archTexture(sc.label || 'SHORTCUT?', '#7c3fa0', '#ffd23d'),
+        map: tex.archTexture(`${sc.label || 'SHORTCUT'} >`, '#7c3fa0', '#ffd23d'),
         transparent: true, side: THREE.DoubleSide,
       }),
     );
-    const sp = this.worldPos(s1 - 26, side * (ROAD_HALF + 6));
-    sign.position.set(sp.x, sp.y + 5, sp.z);
-    sign.rotation.y = this.headingAt(s1 - 26) + Math.PI;
+    const sp = this.worldPos(s1 - 58, side * (ROAD_HALF + 7));
+    sign.position.set(sp.x, sp.y + 7, sp.z);
+    sign.rotation.y = this.headingAt(s1 - 58) + Math.PI;
     this.group.add(sign);
+
+    const arrowMap = tex.archTexture('>>>', '#ffcf24', '#3a126b');
+    for (let i = 0; i < 3; i++) {
+      const markerS = s1 - 34 + i * 13;
+      const marker = new THREE.Mesh(
+        new THREE.PlaneGeometry(8, 4.5),
+        new THREE.MeshBasicMaterial({
+          map: arrowMap, transparent: true, side: THREE.DoubleSide,
+        }),
+      );
+      const mp = this.worldPos(markerS, side * (ROAD_HALF + 2.5));
+      marker.position.set(mp.x, mp.y + 3.1, mp.z);
+      marker.rotation.y = this.headingAt(markerS) + Math.PI;
+      this.group.add(marker);
+    }
 
     this.shortcut = {
       s1, s2, side, curve, len, frames,

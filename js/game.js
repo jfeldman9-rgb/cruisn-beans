@@ -64,6 +64,8 @@ class PackCar {
     this.flipAxis = 'x';
     this.spinT = 0;
     this.spinYaw = 0;
+    this.crashHold = 0;
+    this.recoveryT = 0;
     this.invuln = 0;
     this.airTime = 0;
     this.lean = 0;
@@ -79,6 +81,7 @@ class PackCar {
     this.rearT = rearT;
     this.frontT = frontT;
     this.mesh = makeQuad(rearT, w, this.h);
+    this.visualScale = isPlayer ? 1.3 : 1;
     this.showingFront = false;
     this.mirror = 1;
 
@@ -105,9 +108,12 @@ class Traffic {
   constructor(track, oncoming, index, total) {
     this.track = track;
     this.oncoming = oncoming;
+    // Several semis deliberately run the cruising lane. A cold player
+    // should encounter the wheelie/leapfrog lesson without hunting for it.
+    this.wrongWay = oncoming && index % 4 === 0;
     const kindRoll = Math.random();
     if (oncoming) {
-      if (kindRoll < 0.34) { this.kind = 'semi'; this.w = 7.4; this.h = 6.6; }
+      if (this.wrongWay || kindRoll < 0.34) { this.kind = 'semi'; this.w = 7.4; this.h = 6.6; }
       else if (kindRoll < 0.55) { this.kind = 'bus'; this.w = 6.6; this.h = 6.6; }
       else { this.kind = 'sedan'; this.w = 5.2; this.h = 3.3; }
     } else {
@@ -130,7 +136,8 @@ class Traffic {
     this.group.add(this.mesh, this.shadow);
     // Spread the fleet along the road.
     this.s = 220 + (index / total) * (track.length - 400);
-    this.x = (oncoming ? LANE_ONCOMING : LANE_PLAYER) + (Math.random() - 0.5) * 3;
+    this.x = (this.wrongWay ? LANE_PLAYER : oncoming ? LANE_ONCOMING : LANE_PLAYER)
+      + (Math.random() - 0.5) * (this.wrongWay ? 1.2 : 3);
     this.speed = oncoming ? 24 + Math.random() * 14 : 19 + Math.random() * 9;
     this.clearedBy = 0; // leapfrog cooldown flag
   }
@@ -226,6 +233,7 @@ export class Race {
     this.shake = 0;
     this.lastBumpSound = 0;
     this.lastHonk = 0;
+    this.danger = false;
 
     this.initParticles();
     this.tmpV = new THREE.Vector3();
@@ -350,6 +358,7 @@ export class Race {
 
     car.wheelieCooldown = Math.max(0, car.wheelieCooldown - dt);
     car.invuln = Math.max(0, car.invuln - dt);
+    car.recoveryT = Math.max(0, car.recoveryT - dt);
 
     // ---- stunt triggers ----
     if (events.wheelie) {
@@ -399,10 +408,19 @@ export class Race {
     // ---- spinout: sit in the pile ----
     if (car.spinT > 0) {
       car.spinT -= dt;
-      car.spinYaw += 9 * dt;
-      car.speed = Math.max(3, car.speed - 60 * dt);
-      this.advance(car, dt);
-      if (car.spinT <= 0) car.invuln = 1.2;
+      car.crashHold = Math.max(0, car.crashHold - dt);
+      if (car.crashHold > 0) {
+        car.speed = 0;
+      } else {
+        car.spinYaw += 11 * dt;
+        car.speed = Math.max(2, car.speed - 60 * dt);
+        this.advance(car, dt);
+      }
+      if (car.spinT <= 0) {
+        car.invuln = 1.2;
+        car.recoveryT = 10;
+        this.onEvent('toast', 'COMEBACK BOOST!');
+      }
       return;
     }
 
@@ -410,9 +428,11 @@ export class Race {
     const onDirt = car.mode === 'shortcut';
     const offroad = car.mode === 'road' && Math.abs(car.x) > ROAD_HALF + 0.4;
 
-    const speedMul = (wheelie ? 1.24 : 1) * (offroad ? 0.55 : 1) * (onDirt ? 0.92 : 1);
+    const comeback = car.recoveryT > 0;
+    const speedMul = (wheelie ? 1.24 : 1) * (comeback ? 1.12 : 1)
+      * (offroad ? 0.55 : 1) * (onDirt ? 0.92 : 1);
     const maxSpeed = r.topSpeed * speedMul;
-    const accel = r.accel * (wheelie ? 2.0 : 1);
+    const accel = r.accel * (wheelie ? 2.0 : 1) * (comeback ? 1.55 : 1);
 
     if (this.state !== 'race') {
       car.speed = Math.max(0, car.speed - 30 * dt);
@@ -600,6 +620,7 @@ export class Race {
   // ---------------- traffic ----------------
   updateTraffic(dt) {
     const anchor = this.player.s;
+    let danger = false;
     this.traffic.forEach((v) => {
       const moving = this.state === 'race' || this.demo;
       if (moving) v.s += (v.oncoming ? -v.speed : v.speed) * dt;
@@ -608,7 +629,8 @@ export class Race {
       // Recycle around the player so the road always has life.
       if (v.oncoming && v.s < anchor - 80) {
         v.s = anchor + 500 + Math.random() * 700;
-        v.x = LANE_ONCOMING + (Math.random() - 0.5) * 3;
+        v.x = (v.wrongWay ? LANE_PLAYER : LANE_ONCOMING)
+          + (Math.random() - 0.5) * (v.wrongWay ? 1.2 : 3);
         v.clearedBy = 0;
       } else if (!v.oncoming && v.s < anchor - 160) {
         v.s = anchor + 400 + Math.random() * 500;
@@ -624,7 +646,12 @@ export class Race {
         this.track.worldPos(v.s, v.x, this.tmpV);
         v.group.position.copy(this.tmpV);
       }
+      const ds = v.s - anchor;
+      if (v.wrongWay && ds > 18 && ds < 220 && Math.abs(v.x - this.player.x) < 5.2) {
+        danger = true;
+      }
     });
+    this.danger = danger;
   }
 
   trafficInteract(car, dt, isPlayer) {
@@ -664,16 +691,17 @@ export class Race {
         if (isPlayer) {
           if (car.speed > 44) {
             // Full crash pile.
-            car.spinT = 1.0;
+            car.spinT = 1.45;
+            car.crashHold = 0.72;
             car.spinYaw = 0;
-            car.speed = 6;
+            car.speed = 0;
             car.wheelieT = 0;
             car.twoWheelT = 0;
             car.twoWheelClean = false;
             audio.crash();
             audio.honk();
             this.shake = 1;
-            this.onEvent('toast', 'CRASHED!!');
+            this.onEvent('toast', 'CRASH PILE! PACK GOING BY...');
           } else {
             car.speed *= 0.4;
             audio.crash();
@@ -895,7 +923,7 @@ export class Race {
       }
       // Mirror to fake the opposite 3/4 angle (sprites are drawn from the left).
       const mirror = (showFront ? rel < 0 : rel > 0) ? -1 : 1;
-      car.mesh.scale.x = mirror;
+      car.mesh.scale.set(mirror * car.visualScale, car.visualScale, car.visualScale);
 
       // Billboard yaw + steering lean baked in.
       const yaw = toCam;
@@ -957,10 +985,10 @@ export class Race {
       const ahead = sc.frameAt(Math.min(sc.len, car.ss + 14));
       lookPos = ahead.pos.clone();
     } else {
-      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 7.8)), car.x * 0.55);
-      lookPos = this.track.worldPos(car.s + 14, car.x * 0.3);
+      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 6.2)), car.x * 0.62);
+      lookPos = this.track.worldPos(car.s + 16, car.x * 0.3);
     }
-    const camY = anchorPos.y + (this.demo ? 6.4 : 3.6) + car.yOff * 0.45;
+    const camY = anchorPos.y + (this.demo ? 6.4 : 3.15) + car.yOff * 0.45;
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
       this.camInit = true;
@@ -992,6 +1020,10 @@ export class Race {
       total: this.cars.length,
       beans: car.beansGot,
       wheelie: car.wheelieT > 0,
+      danger: this.danger,
+      stage: this.opts.trackDef.name,
+      zone: this.track.zoneOf(car.s).replaceAll('_', ' ').toUpperCase(),
+      comeback: car.recoveryT > 0,
     };
   }
 
