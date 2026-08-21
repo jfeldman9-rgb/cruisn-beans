@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js';
+import * as tex from './tex.js?v=p2p-20260821';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;

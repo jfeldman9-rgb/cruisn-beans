@@ -1,10 +1,10 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js';
-import { Race } from './game.js';
-import { Input } from './input.js';
-import { audio } from './audio.js';
-import { rivalRearTexture } from './tex.js';
+import { RACERS, RIVALS, STAGES } from './data.js?v=p2p-20260821';
+import { Race } from './game.js?v=p2p-20260821';
+import { Input } from './input.js?v=p2p-20260821';
+import { audio } from './audio.js?v=p2p-20260821';
+import { rivalRearTexture } from './tex.js?v=p2p-20260821';
 
 const $ = (sel) => document.querySelector(sel);
 
