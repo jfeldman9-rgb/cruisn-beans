@@ -146,7 +146,7 @@ export class Track {
         uvs.push(0, v, 1, v);
         if (i < c1) {
           const k = (i - c0) * 2;
-          idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+          idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
         }
       }
       const geo = new THREE.BufferGeometry();
@@ -265,7 +265,7 @@ export class Track {
         uvs.push(0, v, 8, v);
         if (i < c1) {
           const k = (i - c0) * 2;
-          idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+          idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
         }
       }
       const geo = new THREE.BufferGeometry();
@@ -431,8 +431,8 @@ export class Track {
 
   buildRamps() {
     this.ramps = [];
-    const mat = new THREE.MeshBasicMaterial({ color: '#e0a53d' });
-    const side = new THREE.MeshBasicMaterial({ color: '#b5761f' });
+    const mat = new THREE.MeshBasicMaterial({ color: '#e0a53d', side: THREE.DoubleSide });
+    const side = new THREE.MeshBasicMaterial({ color: '#b5761f', side: THREE.DoubleSide });
     (this.def.ramps || []).forEach((u) => {
       const s = u * this.length;
       const f0 = this.frameAt(s);
@@ -450,7 +450,7 @@ export class Track {
         bl.x, bl.y + 0.05, bl.z, br.x, br.y + 0.05, br.z,
         tl.x, tl.y + hgt, tl.z, tr.x, tr.y + hgt, tr.z,
       ], 3));
-      geo.setIndex([0, 1, 2, 1, 3, 2]);
+      geo.setIndex([0, 2, 1, 1, 2, 3]);
       this.group.add(new THREE.Mesh(geo, mat));
       const back = new THREE.BufferGeometry();
       back.setAttribute('position', new THREE.Float32BufferAttribute([
@@ -539,7 +539,7 @@ export class Track {
       uvs.push(0, v, 1, v);
       if (i < n) {
         const k = i * 2;
-        idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+        idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
       }
     }
     const geo = new THREE.BufferGeometry();

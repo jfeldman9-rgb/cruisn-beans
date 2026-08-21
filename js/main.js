@@ -321,3 +321,6 @@ startDemo();
 resize();
 show('title');
 requestAnimationFrame(loop);
+
+// Debug handle for automated tests.
+window.__cb = { get race() { return race; }, input, startRace: (r, s) => { chosenRacer = r; chosenStage = s; startRace(); } };
