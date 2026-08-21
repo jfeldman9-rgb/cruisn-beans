@@ -548,7 +548,7 @@ export class Race {
     let rubber = 1;
     if (!this.demo && !car.finished) {
       const gap = this.player.s - car.s;
-      rubber = THREE.MathUtils.clamp(1 + gap * 0.0028, 0.8, 1.2);
+      rubber = THREE.MathUtils.clamp(1 + gap * 0.004, 0.7, 1.25);
     }
     const curvAhead = Math.abs(this.track.curvatureAt(car.s + 30)) + Math.abs(this.track.curvatureAt(car.s + 14));
     const cornerCap = r.topSpeed * (1.08 - Math.min(0.42, curvAhead * 8.5));
@@ -662,9 +662,9 @@ export class Race {
         if (car.invuln > 0) return;
         v.clearedBy = car;
         if (isPlayer) {
-          if (car.speed > 38) {
+          if (car.speed > 44) {
             // Full crash pile.
-            car.spinT = 1.25;
+            car.spinT = 1.0;
             car.spinYaw = 0;
             car.speed = 6;
             car.wheelieT = 0;
