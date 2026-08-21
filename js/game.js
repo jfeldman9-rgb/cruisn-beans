@@ -81,7 +81,7 @@ class PackCar {
     this.rearT = rearT;
     this.frontT = frontT;
     this.mesh = makeQuad(rearT, w, this.h);
-    this.visualScale = isPlayer ? 1.3 : 1;
+    this.visualScale = isPlayer ? 1.55 : 1;
     this.showingFront = false;
     this.mirror = 1;
 
@@ -989,10 +989,10 @@ export class Race {
       const ahead = sc.frameAt(Math.min(sc.len, car.ss + 14));
       lookPos = ahead.pos.clone();
     } else {
-      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 6.2)), car.x * 0.62);
+      anchorPos = this.track.worldPos(Math.max(0, car.s - (this.demo ? 15 : 5.3)), car.x * 0.68);
       lookPos = this.track.worldPos(car.s + 16, car.x * 0.3);
     }
-    const camY = anchorPos.y + (this.demo ? 6.4 : 3.15) + car.yOff * 0.45;
+    const camY = anchorPos.y + (this.demo ? 6.4 : 2.85) + car.yOff * 0.45;
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
       this.camInit = true;
