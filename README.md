@@ -51,14 +51,15 @@ Lots of beans.
 - Three.js (vendored in `vendor/`), no build step, no CDN, no accounts, no IAP.
 - Select-screen racers and cars are digitized-style sprites (`assets/img/`, keyed from the
   magenta masters in `art/` via `tools/process_art.py`; reference photos in
-  `art/ref/`). On-track named cars use centered, straight-on rear/front
-  cabinet sprites and pitch/roll only for wheelies, flips, and spinouts.
-- All scenery textures are runtime-generated canvases; stages are built from
+  `art/ref/`). On-track named cars use high-resolution, centered rear art and
+  remain camera-facing while pitch/roll sells wheelies, flips, and spinouts.
+- Each stage uses authored panoramic art plus lit, crossed-plane roadside
+  scenery. Roads are built from
   segment lists (bend/elevation/zone) into one long spline road with chunked
   geometry for frustum culling and far landmark draw distance.
-- Audio uses synthesized WebAudio for the engine, radio-style chip music,
-  horns, animals, and wheelie exhaust, plus optional browser speech for the
-  cheesy announcer.
+- Audio uses synthesized WebAudio for the engine, horns, animals, and wheelie
+  exhaust, optional browser speech for the cheesy announcer, and the bundled
+  3:27 song **CRUIS'N THE WORLD** by jfeldman9.
 - Adaptive render resolution targets 60 fps on phones.
 - Test helpers: `?time=300` (big clock), `?short=1` (start near the finish).
 

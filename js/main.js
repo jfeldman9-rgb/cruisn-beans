@@ -1,10 +1,10 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=visual-pass-1';
-import { Race } from './game.js?v=soundtrack-pass-2';
-import { Input } from './input.js?v=visual-pass-1';
-import { audio } from './audio.js?v=soundtrack-pass-2';
-import { rivalRearTexture } from './tex.js?v=visual-pass-1';
+import { RACERS, RIVALS, STAGES } from './data.js?v=finish-fight-1';
+import { Race } from './game.js?v=finish-fight-1';
+import { Input } from './input.js?v=finish-fight-1';
+import { audio } from './audio.js?v=finish-fight-1';
+import { rivalRearTexture } from './tex.js?v=finish-fight-1';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 if (Number.isFinite(seedParam) && seedParam > 0) {
@@ -19,7 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 
 const canvas = $('#game');
 const desktopQuality = matchMedia('(hover: hover) and (pointer: fine)').matches;
-const renderPixelRatio = Math.min(window.devicePixelRatio || 1, desktopQuality ? 1.5 : 1.1);
+const renderPixelRatio = Math.min(window.devicePixelRatio || 1, desktopQuality ? 1.5 : 1.25);
 document.body.classList.toggle('desktop-input', desktopQuality);
 let renderer;
 let webglAvailable = true;
@@ -49,8 +49,8 @@ input.bindSteerSurface($('#steer-surface'));
 input.bindHoldButton($('#btn-brake'), 'brake');
 input.bindGasPad($('#btn-gas'));
 
-const maxRenderScale = desktopQuality ? 1 : 0.9;
-const minRenderScale = 0.72;
+const maxRenderScale = desktopQuality ? 1 : 0.95;
+const minRenderScale = desktopQuality ? 0.78 : 0.82;
 let renderScale = maxRenderScale;
 let race = null;
 let mode = 'title';

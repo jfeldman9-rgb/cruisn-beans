@@ -2,9 +2,9 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=visual-pass-1';
-import * as tex from './tex.js?v=visual-pass-1';
-import { audio } from './audio.js?v=soundtrack-pass-2';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=finish-fight-1';
+import * as tex from './tex.js?v=finish-fight-1';
+import { audio } from './audio.js?v=finish-fight-1';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
@@ -186,7 +186,11 @@ class Traffic {
     this.group = new THREE.Group();
     this.group.add(this.mesh, this.shadow);
     // Spread the fleet along the road.
-    this.s = 220 + (index / total) * (track.length - 400);
+    // Offset the same-way stream by half a slot. Previously its first car and
+    // the authored wrong-lane semi spawned at the exact same distance, making
+    // an invisible two-vehicle wall before the player had learned the wheelie.
+    const slot = oncoming ? index : index + 0.5;
+    this.s = 220 + (slot / total) * (track.length - 400);
     this.x = (this.wrongWay ? LANE_PLAYER : oncoming ? LANE_ONCOMING : LANE_PLAYER)
       + (Math.random() - 0.5) * (this.wrongWay ? 1.2 : 3);
     this.speed = oncoming ? 24 + Math.random() * 14 : 19 + Math.random() * 9;
@@ -243,7 +247,7 @@ export class Race {
     this.track = new Track(opts.trackDef);
     this.scene.add(this.track.group);
     // Long draw distance: haze starts far out, landmarks ignore fog entirely.
-    this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, 260, 1150);
+    this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, 420, 1700);
     this.panoramaTexture = opts.trackDef.panorama && externalImageLoading
       ? loadPanorama(opts.trackDef.panorama)
       : null;
@@ -762,14 +766,33 @@ export class Race {
         v.retired = true;
         v.group.visible = false;
       };
-      const respawn = (minimum, span, lane, jitter) => {
+      const respawn = (minimum, span, lane, jitter, minGap) => {
         const first = anchor + minimum;
         const last = this.track.length - 35;
         if (first >= last) {
           retire();
           return false;
         }
-        v.s = first + Math.random() * Math.min(span, last - first);
+        const width = Math.min(span, last - first);
+        let bestS = first;
+        let bestClearance = -1;
+        // Try several authored-looking positions and keep the clearest. This
+        // prevents recycled traffic from stacking into unavoidable walls while
+        // preserving a busy road and real pileups when the player makes contact.
+        for (let attempt = 0; attempt < 14; attempt++) {
+          const candidate = first + Math.random() * width;
+          let clearance = Infinity;
+          this.traffic.forEach((other) => {
+            if (other === v || other.retired || Math.abs(other.x - lane) >= 4.8) return;
+            clearance = Math.min(clearance, Math.abs(other.s - candidate));
+          });
+          if (clearance > bestClearance) {
+            bestClearance = clearance;
+            bestS = candidate;
+          }
+          if (clearance >= minGap) break;
+        }
+        v.s = bestS;
         v.x = lane + (Math.random() - 0.5) * jitter;
         v.clearedBy = 0;
         v.crashT = 0;
@@ -801,12 +824,13 @@ export class Race {
       }
       // Recycle around the player so the road always has life.
       if (v.oncoming && v.s < anchor - 80) {
-        if (!respawn(v.wrongWay ? 2300 : 500, v.wrongWay ? 900 : 700,
-          v.wrongWay ? LANE_PLAYER : LANE_ONCOMING, v.wrongWay ? 1.2 : 3)) return;
+        if (!respawn(v.wrongWay ? 2300 : 500, v.wrongWay ? 900 : 760,
+          v.wrongWay ? LANE_PLAYER : LANE_ONCOMING, v.wrongWay ? 1.2 : 3,
+          v.wrongWay ? 220 : 68)) return;
       } else if (!v.oncoming && v.s < anchor - 160) {
-        if (!respawn(400, 500, LANE_PLAYER, 3)) return;
+        if (!respawn(420, 900, LANE_PLAYER, 3, 115)) return;
       } else if (!v.oncoming && v.s > anchor + 1600) {
-        if (!respawn(300, 900, LANE_PLAYER, 3)) return;
+        if (!respawn(340, 1000, LANE_PLAYER, 3, 115)) return;
       }
       const visible = Math.abs(v.s - anchor) < 1300;
       v.group.visible = visible;
@@ -1176,16 +1200,17 @@ export class Race {
         car.mesh.material.map = showFront ? car.frontT : car.rearT;
         car.mesh.material.needsUpdate = true;
       }
-      // Mirror only switches small asymmetric details such as the driver seat;
-      // the body silhouette itself remains centered and road-aligned.
-      const mirror = (showFront ? rel < 0 : rel > 0) ? -1 : 1;
-      car.mesh.scale.set(mirror * car.visualScale, car.visualScale, car.visualScale);
+      // Keep the authored driver, lights, and body details on a stable side.
+      // Whole-sprite mirroring made cars visibly flip handedness on each bend.
+      car.mesh.scale.set(car.visualScale, car.visualScale, car.visualScale);
 
       // Billboard yaw only. The old code added up to 20 degrees of steering
       // yaw on top of already-angled raster art, which made every car look as
       // if it were permanently crab-walking across the road.
       const yaw = toCam;
-      car.mesh.rotation.y = yaw + (car.spinT > 0 ? car.spinYaw : 0);
+      // A flat quad rotated through its crash yaw becomes edge-on and briefly
+      // disappears. Keep it camera-facing and sell the spin with roll below.
+      car.mesh.rotation.y = yaw;
 
       // Pitch/roll from stunts.
       let pitch = 0;
@@ -1206,6 +1231,7 @@ export class Race {
         const k = Math.min(1, (TWOWHEEL_TIME - car.twoWheelT) / 0.25) * Math.min(1, car.twoWheelT / 0.25);
         roll = 0.55 * car.twoWheelDir * k;
       }
+      if (car.spinT > 0) roll += Math.sin(car.spinYaw) * 0.18;
       car.mesh.rotation.x = pitch;
       car.mesh.rotation.z = roll;
 
@@ -1241,8 +1267,8 @@ export class Race {
     let lookPos;
     if (car.mode === 'shortcut' && this.track.shortcut) {
       const sc = this.track.shortcut;
-      const backDist = mode === 0 ? 14 : mode === 1 ? 9 : -1.2;
-      const aheadDist = mode === 0 ? 30 : mode === 1 ? 23 : 44;
+      const backDist = mode === 0 ? 21 : mode === 1 ? 9 : -1.2;
+      const aheadDist = mode === 0 ? 60 : mode === 1 ? 23 : 44;
       const backS = car.ss - backDist;
       const back = sc.frameAt(Math.max(0, backS));
       anchorPos = back.pos.clone().addScaledVector(back.left, car.sx || 0);
@@ -1250,15 +1276,15 @@ export class Race {
       const ahead = sc.frameAt(Math.min(sc.len, car.ss + aheadDist));
       lookPos = ahead.pos.clone();
     } else {
-      const backDist = this.demo ? 15 : mode === 0 ? 13.5 : mode === 1 ? 8.5 : -1.2;
-      const aheadDist = this.demo ? 29 : mode === 0 ? 40 : mode === 1 ? 26 : 46;
+      const backDist = this.demo ? 15 : mode === 0 ? 21 : mode === 1 ? 8.5 : -1.2;
+      const aheadDist = this.demo ? 29 : mode === 0 ? 60 : mode === 1 ? 26 : 46;
       const laneX = this.demo ? car.x * 0.75 : car.x;
       const backS = car.s - backDist;
       anchorPos = this.track.worldPos(Math.max(0, backS), laneX);
       if (backS < 0) anchorPos.addScaledVector(this.track.frameAt(0).tan, backS);
       lookPos = this.track.worldPos(car.s + aheadDist, laneX);
     }
-    const camLift = this.demo ? 6.4 : mode === 0 ? 8.25 : mode === 1 ? 4.7 : 1.65;
+    const camLift = this.demo ? 6.4 : mode === 0 ? 12.25 : mode === 1 ? 4.7 : 1.65;
     const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
@@ -1272,10 +1298,10 @@ export class Race {
     }
     // Aim closer to the horizon in high chase. This retains the requested
     // elevated/wide traffic view without pitching 30 degrees into the road.
-    lookPos.y += (mode === 0 ? 3.65 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
+    lookPos.y += (mode === 0 ? 5.6 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
     this.camera.lookAt(lookPos);
     const speed01 = Math.min(1, car.speed / 66);
-    const baseFov = this.demo ? 62 : mode === 0 ? 66 : mode === 1 ? 68 : 72;
+    const baseFov = this.demo ? 62 : mode === 0 ? 64 : mode === 1 ? 68 : 72;
     const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0);
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, 5 * dt);
     this.camera.updateProjectionMatrix();

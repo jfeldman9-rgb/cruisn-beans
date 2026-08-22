@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=visual-pass-1';
+import * as tex from './tex.js?v=finish-fight-1';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -199,7 +199,9 @@ export class Track {
   }
 
   buildRoad() {
-    // Two-way asphalt: center double-yellow, dashed lane lines, edge lines.
+    // Two-way asphalt: center double-yellow and edge lines. The old dashed
+    // whites landed exactly under the two traffic streams, visually putting
+    // every car on a lane divider instead of inside a lane.
     const roadTex = (() => {
       const c = document.createElement('canvas');
       c.width = 512; c.height = 512;
@@ -230,12 +232,6 @@ export class Track {
       // Double yellow center.
       g.fillStyle = '#ffd23d';
       g.fillRect(240, 0, 10, 512); g.fillRect(262, 0, 10, 512);
-      // Dashed white lane centers.
-      g.fillStyle = '#d9d9cf';
-      for (let y = 34; y < 512; y += 256) {
-        g.fillRect(120, y, 12, 150);
-        g.fillRect(380, y, 12, 150);
-      }
       // A faint dusty edge integrates the asphalt with each stage shoulder.
       const dust = new THREE.Color(this.def.shoulder).getStyle();
       const edge = g.createLinearGradient(0, 0, 512, 0);
@@ -502,10 +498,15 @@ export class Track {
       const [t, w, h] = this.propTexture(kind);
       // Text-bearing props are single-sided so their text never mirrors.
       const hasText = kind.startsWith('sign_') || kind === 'building_surf';
-      const mat = new THREE.MeshBasicMaterial({
+      // Text stays unlit and one-sided so it reads correctly. Natural props
+      // share the stage lighting, and broad foliage/rocks use crossed planes
+      // so they retain volume when the road bends past them.
+      const Material = hasText ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
+      const mat = new Material({
         map: t, transparent: true, alphaTest: 0.4,
         side: hasText ? THREE.FrontSide : THREE.DoubleSide,
       });
+      const crossed = new Set(['palm', 'cactus', 'rock', 'lavarock', 'hibiscus', 'agave']).has(kind);
       const chunks = new Map();
       list.forEach((item) => {
         const key = `${Math.round(item.p.x / 500)}_${Math.round(item.p.z / 500)}`;
@@ -513,10 +514,14 @@ export class Track {
         chunks.get(key).push(item);
       });
       chunks.forEach((items) => {
-        const geos = items.map(({ p, angle }) => {
-          const geo = new THREE.PlaneGeometry(w, h);
-          geo.applyMatrix4(new THREE.Matrix4().makeRotationY(angle).setPosition(p.x, p.y + h / 2 - 0.4, p.z));
-          return geo;
+        const geos = items.flatMap(({ p, angle }) => {
+          const makePlane = (yaw) => {
+            const geo = new THREE.PlaneGeometry(w, h);
+            geo.applyMatrix4(new THREE.Matrix4().makeRotationY(yaw)
+              .setPosition(p.x, p.y + h / 2 - 0.4, p.z));
+            return geo;
+          };
+          return crossed ? [makePlane(angle), makePlane(angle + Math.PI / 2)] : [makePlane(angle)];
         });
         const merged = mergeGeometries(geos);
         merged.computeBoundingSphere();

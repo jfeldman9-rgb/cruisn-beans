@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as THREE from '../vendor/three.module.js';
 
 let seed = 0xc0ffee;
 Math.random = () => {
@@ -32,7 +33,7 @@ globalThis.window = {};
 globalThis.localStorage = { getItem: () => '1', setItem() {} };
 
 const { Race } = await import('../js/game.js');
-const { STAGES } = await import('../js/data.js');
+const { RACERS, STAGES } = await import('../js/data.js');
 
 const racers = Array.from({ length: 7 }, (_, i) => ({
   id: `test-${i}`,
@@ -99,6 +100,13 @@ for (let i = 0; i < STAGES.length; i++) {
   const before = truck.s;
   race.updateTraffic(0.25);
   close(truck.s, before - truck.cruiseSpeed * 0.25, 0.01);
+  const playerLaneTraffic = race.traffic
+    .filter((v) => Math.abs(v.x - 6) < 4.8)
+    .sort((a, b) => a.s - b.s);
+  for (let i = 1; i < playerLaneTraffic.length; i++) {
+    assert.ok(playerLaneTraffic[i].s - playerLaneTraffic[i - 1].s > 100,
+      'initial same-lane traffic must not spawn as a stacked wall');
+  }
 }
 
 // 3. Wheelie leapfrog fires once and does not double-award generic big air.
@@ -253,26 +261,39 @@ for (let i = 0; i < STAGES.length; i++) {
   finish.results.filter((r) => !r.finished).forEach((r) => assert.equal(r.time, null));
 }
 
-// 9. Default camera is materially higher/farther, level, and no longer fisheye.
+// 9. Default camera is high, far, nearly level, and frames every production car.
 {
   const { race } = makeRace(0);
   const p = race.player;
   p.s = 1000; p.x = 6; p.speed = 60; p.lean = 0.3;
   race.updateCamera(1);
   const carPos = p.worldPos();
-  assert.ok(race.camera.position.distanceTo(carPos) > 14);
-  assert.ok(race.camera.position.y - carPos.y > 7.5);
+  assert.ok(race.camera.position.distanceTo(carPos) > 24);
+  assert.ok(race.camera.position.y - carPos.y > 12);
   assert.ok(race.camera.fov < 76);
   assert.equal(p.visualScale, 1.04);
   race.camera.updateMatrixWorld(true);
-  const carBottom = carPos.clone().project(race.camera);
-  const carTopWorld = carPos.clone();
-  carTopWorld.y += p.h * p.visualScale;
-  const carTop = carTopWorld.project(race.camera);
-  cameraScreenShare = Math.abs(carTop.y - carBottom.y) / 2;
-  assert.ok(cameraScreenShare > 0.12 && cameraScreenShare < 0.3, `car height ${(cameraScreenShare * 100).toFixed(1)}%`);
+  const direction = new THREE.Vector3();
+  race.camera.getWorldDirection(direction);
+  assert.ok(Math.abs(Math.asin(direction.y)) < THREE.MathUtils.degToRad(7), 'camera pitch is too steep');
+  const shares = RACERS.map((racer) => {
+    const carBottom = carPos.clone().project(race.camera);
+    const carTopWorld = carPos.clone();
+    carTopWorld.y += racer.spriteWidth * racer.raceRearAspect * p.visualScale;
+    const carTop = carTopWorld.project(race.camera);
+    return Math.abs(carTop.y - carBottom.y) / 2;
+  });
+  cameraScreenShare = Math.max(...shares);
+  shares.forEach((share) => assert.ok(share > 0.105 && share < 0.16,
+    `production car height ${(share * 100).toFixed(1)}%`));
   race.updateVisuals(1 / 60);
   assert.ok(Math.abs(p.mesh.rotation.z) <= 0.0501);
+  assert.ok(p.mesh.scale.x > 0, 'car art must not mirror on a bend');
+  const stableYaw = p.mesh.rotation.y;
+  p.spinT = 1; p.spinYaw = Math.PI / 2;
+  race.updateVisuals(1 / 60);
+  assert.ok(p.mesh.scale.x > 0, 'car art must not mirror during a crash');
+  close(p.mesh.rotation.y, stableYaw, 0.001);
   assert.equal(race.cycleCamera(), 'ARCADE CHASE');
   assert.equal(race.cycleCamera(), 'BUMPER');
 }
@@ -321,6 +342,10 @@ for (let i = 0; i < STAGES.length; i++) {
   race.updateTraffic(0);
   const authoredGap = truck.s - p.s;
   assert.ok(authoredGap >= 2300 && authoredGap <= 3200);
+  const closestPlayerLane = Math.min(...race.traffic
+    .filter((v) => v !== truck && !v.retired && Math.abs(v.x - 6) < 4.8)
+    .map((v) => Math.abs(v.s - truck.s)));
+  assert.ok(closestPlayerLane >= 220, 'recycled wrong-lane semi needs a readable approach gap');
   race.updateTraffic(0);
   close(truck.s - p.s, authoredGap, 0.001);
 
