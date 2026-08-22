@@ -1,9 +1,9 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
 import { RACERS, RIVALS, STAGES } from './data.js?v=visual-pass-1';
-import { Race } from './game.js?v=soundtrack-pass-1';
+import { Race } from './game.js?v=soundtrack-pass-2';
 import { Input } from './input.js?v=visual-pass-1';
-import { audio } from './audio.js?v=soundtrack-pass-1';
+import { audio } from './audio.js?v=soundtrack-pass-2';
 import { rivalRearTexture } from './tex.js?v=visual-pass-1';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));

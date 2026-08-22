@@ -7,8 +7,10 @@ globalThis.localStorage = {
 };
 
 const visibilityListeners = [];
+const appendedMedia = [];
 globalThis.document = {
   hidden: false,
+  body: { appendChild: (element) => appendedMedia.push(element) },
   addEventListener(type, listener) {
     if (type === 'visibilitychange') visibilityListeners.push(listener);
   },
@@ -50,9 +52,11 @@ class FakeAudio {
     this.pauseCalls = 0;
     this.rejectNext = null;
     this.listeners = new Map();
+    this.attributes = new Map();
     FakeAudio.instances.push(this);
   }
   addEventListener(type, listener) { this.listeners.set(type, listener); }
+  setAttribute(name, value) { this.attributes.set(name, value); }
   play() {
     this.playCalls++;
     if (this.rejectNext) {
@@ -92,6 +96,10 @@ assert.match(song.src, /assets\/audio\/cruisn-the-world\.mp3/);
 assert.equal(song.loop, true);
 assert.equal(song.preload, 'auto');
 assert.equal(song.playsInline, true);
+assert.equal(song.id, 'game-soundtrack');
+assert.equal(song.hidden, true);
+assert.equal(song.attributes.get('aria-hidden'), 'true');
+assert.deepEqual(appendedMedia, [song]);
 
 assert.equal(await audio.startMusic('title'), true);
 assert.equal(song.volume, 0.22);

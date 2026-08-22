@@ -1,7 +1,7 @@
 // Streaming soundtrack plus WebAudio engine, cabinet calls, and stunt SFX.
 // The synth sequencer remains as a fallback if the MP3 cannot play.
 
-const SOUNDTRACK_URL = 'assets/audio/cruisn-the-world.mp3?v=soundtrack-pass-1';
+const SOUNDTRACK_URL = 'assets/audio/cruisn-the-world.mp3?v=soundtrack-pass-2';
 const MUSIC_LEVELS = Object.freeze({
   title: 0.22,
   countdown: 0.16,
@@ -38,6 +38,14 @@ class AudioBox {
             this.songFailed = true;
             if (this.musicWanted) this.startChipMusic(this.musicMode);
           });
+        }
+        // Keeping the element in the document gives mobile Safari a stable
+        // media lifecycle while remaining invisible and non-interactive.
+        this.song.id = 'game-soundtrack';
+        this.song.hidden = true;
+        this.song.setAttribute?.('aria-hidden', 'true');
+        if (typeof document !== 'undefined' && document.body?.appendChild) {
+          document.body.appendChild(this.song);
         }
       } catch (error) {
         this.song = null;
