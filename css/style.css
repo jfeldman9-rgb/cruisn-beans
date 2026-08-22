@@ -1,4 +1,4 @@
-/* CRUIS'N BEANS — chunky 90s arcade chrome. */
+/* CRUIS'N BEANS — cinematic 90s arcade chrome. */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
@@ -7,6 +7,9 @@
   --green: #2fae3f;
   --blue: #0b5aa5;
   --pink: #ff5aa2;
+  --glass: rgba(9, 9, 29, 0.72);
+  --glass-edge: rgba(255, 255, 255, 0.28);
+  --glass-shadow: 0 16px 42px rgba(0, 0, 0, 0.48);
 }
 
 html, body {
@@ -17,13 +20,13 @@ html, body {
   -webkit-user-select: none; user-select: none;
   touch-action: none;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 #game {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  image-rendering: auto;
 }
 
 #steer-surface { position: fixed; inset: 0; z-index: 4; }
@@ -36,13 +39,21 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 2vh;
-  background: rgba(6, 4, 24, 0.72);
+  background:
+    radial-gradient(circle at 50% 36%, rgba(75, 66, 145, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(6, 7, 24, 0.62), rgba(4, 3, 15, 0.84));
   color: #fff;
   text-align: center;
   padding: max(2vh, env(safe-area-inset-top)) max(2vw, env(safe-area-inset-right)) max(2vh, env(safe-area-inset-bottom)) max(2vw, env(safe-area-inset-left));
 }
 .screen.visible { display: flex; }
 .screen.transparent { background: none; pointer-events: none; }
+#screen-title { background: radial-gradient(circle at 50% 38%, rgba(18, 37, 91, 0.22), rgba(3, 3, 13, 0.72) 72%); }
+#screen-racer, #screen-track {
+  background:
+    linear-gradient(180deg, rgba(4, 6, 22, 0.62), rgba(6, 4, 21, 0.9)),
+    radial-gradient(circle at 50% 10%, rgba(255, 183, 75, 0.16), transparent 52%);
+}
 
 .screen-head {
   font-size: clamp(20px, 5vh, 42px);
@@ -109,9 +120,11 @@ html, body {
 .back-btn {
   position: absolute; top: max(1.5vh, env(safe-area-inset-top)); left: max(1.5vw, env(safe-area-inset-left));
   font-family: inherit; font-size: clamp(12px, 2.6vh, 18px);
-  color: #fff; background: rgba(0,0,0,0.5);
-  border: 2px solid #fff; border-radius: 8px;
+  color: #fff; background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.72); border-radius: 9px;
   padding: 0.8vh 2vw; letter-spacing: 2px; cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 1px rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 
 /* ---------- select cards ---------- */
@@ -124,18 +137,34 @@ html, body {
 .cards.tracks { grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(92vw, 980px); }
 
 .card {
+  position: relative;
+  overflow: hidden;
   font-family: inherit;
-  background: linear-gradient(180deg, #2a1f66, #171040);
-  border: 3px solid var(--yellow);
-  border-radius: 12px;
+  background: linear-gradient(150deg, rgba(48, 42, 100, 0.82), rgba(13, 11, 42, 0.9));
+  border: 1px solid rgba(255, 210, 61, 0.86);
+  border-radius: 16px;
   color: #fff;
   padding: 1.2vh 0.8vw;
   cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 0.8vh;
-  box-shadow: 0 5px 0 #0a0722, 0 8px 16px rgba(0,0,0,0.55);
-  transition: transform 0.08s;
+  box-shadow: var(--glass-shadow), inset 0 1px rgba(255,255,255,0.16);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15); backdrop-filter: blur(10px) saturate(1.15);
+  transition: transform 0.12s ease-out, border-color 0.12s, box-shadow 0.12s;
 }
-.card:hover, .card:focus-visible { transform: scale(1.04) rotate(-1deg); border-color: #fff; }
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 44%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1), transparent);
+  pointer-events: none;
+}
+.card > * { position: relative; z-index: 1; }
+.card:hover, .card:focus-visible {
+  transform: translateY(-5px) scale(1.025);
+  border-color: #fff;
+  box-shadow: 0 22px 55px rgba(0,0,0,0.56), 0 0 24px rgba(255,210,61,0.16), inset 0 1px rgba(255,255,255,0.2);
+}
 .card:active { transform: scale(0.98); }
 
 .card-name {
@@ -146,11 +175,15 @@ html, body {
 }
 .card-face {
   width: 62%; aspect-ratio: 1; object-fit: contain;
-  image-rendering: pixelated;
-  background: radial-gradient(circle, #4633a8 0%, #211856 70%);
-  border: 2px solid #6a5ae0; border-radius: 8px;
+  image-rendering: auto;
+  background: radial-gradient(circle at 50% 32%, rgba(115,103,218,0.72) 0%, rgba(31,24,82,0.9) 72%);
+  border: 1px solid rgba(194,187,255,0.48); border-radius: 11px;
+  box-shadow: inset 0 1px rgba(255,255,255,0.15), 0 9px 22px rgba(0,0,0,0.28);
 }
-.card-car { width: 92%; height: 9vh; object-fit: contain; image-rendering: pixelated; }
+.card-car {
+  width: 92%; height: 9vh; object-fit: contain; image-rendering: auto;
+  filter: drop-shadow(0 8px 7px rgba(0,0,0,0.48));
+}
 .card-carname { font-size: clamp(8px, 1.7vh, 12px); color: #9db2ff; letter-spacing: 1px; }
 .card-tag { font-size: clamp(7px, 1.5vh, 11px); color: var(--pink); letter-spacing: 1px; line-height: 1.4; }
 .card-tag.small { color: #9db2ff; }
@@ -166,17 +199,32 @@ html, body {
 .card-stats div {
   display: flex; align-items: center; gap: 5px;
   font-size: clamp(7px, 1.4vh, 10px); color: #cfd6ff;
-  background: #0d0a2b; border-radius: 4px; padding: 2px 4px;
+  background: rgba(6,5,25,0.68); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 2px 4px;
 }
 .card-stats i {
   display: block; height: 6px; border-radius: 3px;
   background: linear-gradient(90deg, var(--green), var(--yellow));
 }
 
-.track-art { width: 92%; height: 14vh; border-radius: 8px; border: 2px solid #6a5ae0; }
-.track-art-hawaii { background: linear-gradient(180deg, #7ec8ff 55%, #1673c9 56%, #1673c9 75%, #e7d089 76%); }
-.track-art-desert { background: linear-gradient(180deg, #ff9a3d 50%, #b0552f 51%, #b0552f 64%, #d9a05a 65%); }
-.track-art-tequila { background: linear-gradient(180deg, #2b1a5e 45%, #7c3fa0 65%, #ff9d5c 66%, #a86f3d 67%); }
+.track-card { padding: 1.05vh 0.72vw 1.3vh; }
+.track-art {
+  width: 94%; height: 19vh;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,0.5);
+  background-position: center;
+  background-size: cover;
+  background-color: #242052;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.24), 0 10px 26px rgba(0,0,0,0.42);
+}
+.track-art-hawaii {
+  background-image: linear-gradient(180deg, rgba(25,72,121,0.04), rgba(2,25,49,0.2)), url("../assets/env/hawaii-panorama.webp");
+}
+.track-art-desert {
+  background-image: linear-gradient(180deg, rgba(130,56,14,0.02), rgba(54,20,12,0.24)), url("../assets/env/desert-panorama.webp");
+}
+.track-art-tequila {
+  background-image: linear-gradient(180deg, rgba(53,25,95,0.02), rgba(23,8,48,0.27)), url("../assets/env/tequila-panorama.webp");
+}
 
 /* ---------- HUD ---------- */
 #hud-top {
@@ -191,10 +239,12 @@ html, body {
   position: absolute; top: max(1vh, env(safe-area-inset-top));
   left: max(2vw, env(safe-area-inset-left));
   width: 20vw; height: 10px;
-  background: rgba(8, 6, 30, 0.72);
-  border: 2px solid var(--yellow);
+  background: rgba(8, 6, 30, 0.66);
+  border: 1px solid rgba(255,210,61,0.9);
   border-radius: 6px;
   pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.36), inset 0 1px rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 #hud-progress-fill {
   height: 100%; width: 0%;
@@ -213,6 +263,8 @@ html, body {
   text-shadow: 0 2px 0 #000;
   pointer-events: none;
   white-space: nowrap;
+  padding: 0.45em 0.9em;
+  background: linear-gradient(90deg, transparent, rgba(7,8,25,0.58) 18%, rgba(7,8,25,0.58) 82%, transparent);
 }
 #hud-location small { color: var(--yellow); margin-left: 0.8em; }
 
@@ -232,15 +284,17 @@ html, body {
   display: inline-block;
 }
 .hud-box {
-  background: rgba(8, 6, 30, 0.72);
-  border: 2px solid var(--yellow);
-  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(24,25,59,0.76), rgba(6,7,24,0.68));
+  border: 1px solid rgba(255,210,61,0.9);
+  border-radius: 11px;
   padding: 0.6vh 1.6vw;
   color: #fff;
   font-size: clamp(14px, 3.4vh, 26px);
   letter-spacing: 1px;
   display: flex; align-items: baseline; gap: 6px;
   text-shadow: 0 2px 0 #000;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 1px rgba(255,255,255,0.14);
+  -webkit-backdrop-filter: blur(7px) saturate(1.2); backdrop-filter: blur(7px) saturate(1.2);
 }
 .hud-box label { font-size: 0.55em; color: var(--yellow); }
 #hud-time.low { color: var(--red); animation: blink 0.5s steps(2) infinite; }
@@ -252,6 +306,8 @@ html, body {
   color: #fff; font-size: clamp(16px, 4vh, 30px);
   text-shadow: 0 2px 0 #000, 0 0 12px rgba(255, 210, 61, 0.5);
   pointer-events: none;
+  padding: 0.18em 0.65em;
+  background: linear-gradient(90deg, transparent, rgba(4,5,18,0.56), transparent);
 }
 
 #countdown {
@@ -295,10 +351,11 @@ html, body {
   gap: 0.6vw;
   padding: 0.5vh 1vw;
   color: #fff;
-  background: linear-gradient(110deg, rgba(20, 12, 62, 0.94), rgba(125, 24, 112, 0.88));
-  border: 3px solid var(--yellow);
+  background: linear-gradient(110deg, rgba(20, 12, 62, 0.88), rgba(125, 24, 112, 0.78));
+  border: 1px solid rgba(255,210,61,0.95);
   border-radius: 12px;
-  box-shadow: 0 6px 0 rgba(30, 4, 40, 0.8);
+  box-shadow: 0 14px 36px rgba(16, 2, 28, 0.58), inset 0 1px rgba(255,255,255,0.16);
+  -webkit-backdrop-filter: blur(9px) saturate(1.2); backdrop-filter: blur(9px) saturate(1.2);
   transform: translateX(130%) skewX(-5deg);
   opacity: 0;
   pointer-events: none;
@@ -309,7 +366,8 @@ html, body {
   width: 56%;
   max-height: 86px;
   object-fit: contain;
-  image-rendering: pixelated;
+  image-rendering: auto;
+  filter: drop-shadow(0 7px 5px rgba(0,0,0,0.42));
 }
 #rival-pass div { display: flex; flex-direction: column; text-align: left; }
 #rival-pass strong { color: var(--yellow); font-size: clamp(12px, 2.6vh, 20px); }
@@ -355,10 +413,11 @@ html, body {
   gap: 0.35vh;
   padding: 1.8vh 2vw;
   color: #fff;
-  background: linear-gradient(100deg, rgba(7,52,122,0.95), rgba(42,20,132,0.95));
-  border: 5px solid var(--yellow);
+  background: linear-gradient(100deg, rgba(7,52,122,0.89), rgba(42,20,132,0.88));
+  border: 2px solid var(--yellow);
   border-radius: 14px;
-  box-shadow: 0 0 36px rgba(255,210,61,0.85), 0 8px 0 rgba(10,7,40,0.8);
+  box-shadow: 0 0 36px rgba(255,210,61,0.62), 0 20px 55px rgba(10,7,40,0.64), inset 0 1px rgba(255,255,255,0.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.25); backdrop-filter: blur(8px) saturate(1.25);
   opacity: 0;
   pointer-events: none;
 }
@@ -378,14 +437,16 @@ html, body {
 
 #hint {
   position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) rotate(-2deg);
-  background: rgba(8, 6, 30, 0.85);
-  border: 3px dashed var(--yellow);
+  background: rgba(8, 6, 30, 0.76);
+  border: 2px dashed var(--yellow);
   border-radius: 14px;
   color: var(--yellow);
   font-size: clamp(14px, 3.6vh, 28px);
   line-height: 1.5; letter-spacing: 1px;
   padding: 2vh 3vw;
   opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  box-shadow: 0 16px 42px rgba(0,0,0,0.45), inset 0 1px rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
 }
 #hint.show { opacity: 1; }
 #hint b { color: var(--green); }
@@ -435,12 +496,14 @@ html, body {
   pointer-events: auto;
   cursor: pointer;
   color: #fff;
-  background: rgba(8, 6, 30, 0.82);
-  border: 2px solid var(--yellow);
+  background: rgba(8, 6, 30, 0.72);
+  border: 1px solid var(--yellow);
   border-radius: 9px;
   font: inherit;
   font-size: 12px;
   line-height: 1;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.34), inset 0 1px rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 #btn-camera small { display: block; margin-top: 4px; color: var(--yellow); font-size: 8px; }
 
@@ -465,14 +528,16 @@ html, body {
 #results-list { display: flex; flex-direction: column; gap: 0.8vh; width: min(88vw, 560px); }
 .result-row {
   display: flex; align-items: center; gap: 2vw;
-  background: rgba(8, 6, 30, 0.8);
-  border: 2px solid #3d3370;
+  background: linear-gradient(100deg, rgba(22,20,55,0.78), rgba(7,7,24,0.75));
+  border: 1px solid rgba(130,117,205,0.58);
   border-radius: 10px;
   padding: 0.5vh 2vw;
   font-size: clamp(12px, 2.8vh, 22px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.28), inset 0 1px rgba(255,255,255,0.08);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
-.result-row.me { border-color: var(--yellow); background: rgba(60, 40, 5, 0.85); }
-.result-row img { width: clamp(26px, 5.5vh, 44px); height: clamp(26px, 5.5vh, 44px); object-fit: contain; image-rendering: pixelated; }
+.result-row.me { border-color: var(--yellow); background: linear-gradient(100deg, rgba(80,55,7,0.82), rgba(30,21,7,0.78)); }
+.result-row img { width: clamp(26px, 5.5vh, 44px); height: clamp(26px, 5.5vh, 44px); object-fit: contain; image-rendering: auto; }
 .result-row .rpos { color: var(--yellow); width: 3ch; text-align: left; }
 .result-row .rname { flex: 1; text-align: left; letter-spacing: 2px; }
 .result-row .rtime { color: #9db2ff; }
@@ -486,11 +551,13 @@ html, body {
   z-index: 30;
   width: 44px; height: 44px;
   border-radius: 10px;
-  background: rgba(8, 6, 30, 0.72);
-  border: 2px solid #fff;
+  background: rgba(8, 6, 30, 0.65);
+  border: 1px solid rgba(255,255,255,0.78);
   color: #fff;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.32), inset 0 1px rgba(255,255,255,0.12);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
 }
 #btn-mute .slash { display: none; }
 #btn-mute.muted .slash { display: block; }
@@ -554,6 +621,30 @@ body.no-webgl #webgl-warning.attention { animation: webgl-attention 0.55s steps(
   #btn-gas, #btn-brake, #btn-camera { display: none; }
   .hint-touch { display: none; }
   .hint-desktop { display: inline; }
+}
+.desktop-input #btn-gas,
+.desktop-input #btn-brake,
+.desktop-input #btn-camera { display: none; }
+.desktop-input .hint-touch { display: none; }
+.desktop-input .hint-desktop { display: inline; }
+
+/* iOS composites every blurred panel over the animated WebGL layer. Keep the
+   glass color and borders on touch devices without paying that cost per HUD
+   element; desktop retains the full blur treatment. */
+@media (hover: none), (pointer: coarse) {
+  .card,
+  .back-btn,
+  #hud-progress,
+  .hud-box,
+  #rival-pass,
+  #checkpoint-flash,
+  #hint,
+  #btn-camera,
+  .result-row,
+  #btn-mute {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 @media (max-height: 500px) {

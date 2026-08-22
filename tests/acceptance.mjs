@@ -263,7 +263,7 @@ for (let i = 0; i < STAGES.length; i++) {
   assert.ok(race.camera.position.distanceTo(carPos) > 14);
   assert.ok(race.camera.position.y - carPos.y > 7.5);
   assert.ok(race.camera.fov < 76);
-  assert.equal(p.visualScale, 1.16);
+  assert.equal(p.visualScale, 1.04);
   race.camera.updateMatrixWorld(true);
   const carBottom = carPos.clone().project(race.camera);
   const carTopWorld = carPos.clone();

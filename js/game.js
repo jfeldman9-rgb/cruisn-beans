@@ -2,9 +2,9 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=world-pass-3';
-import * as tex from './tex.js?v=world-pass-3';
-import { audio } from './audio.js?v=world-pass-3';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=visual-pass-1';
+import * as tex from './tex.js?v=visual-pass-1';
+import { audio } from './audio.js?v=visual-pass-1';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
@@ -12,15 +12,35 @@ const TWOWHEEL_TIME = 1.05;
 
 const texLoader = new THREE.TextureLoader();
 const spriteCache = new Map();
+// The deterministic Node test harness provides canvases but deliberately has
+// no browser Image element. Keep its procedural fallbacks while the real game
+// uses the authored WebP art.
+const externalImageLoading = typeof Image !== 'undefined'
+  && typeof Image.prototype?.addEventListener === 'function';
 function loadSprite(url) {
   if (!spriteCache.has(url)) {
     const t = texLoader.load(url);
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.LinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 8;
     t.colorSpace = THREE.SRGBColorSpace;
     spriteCache.set(url, t);
   }
   return spriteCache.get(url);
+}
+
+const panoramaCache = new Map();
+function loadPanorama(url) {
+  if (!panoramaCache.has(url)) {
+    const t = texLoader.load(url);
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.colorSpace = THREE.SRGBColorSpace;
+    panoramaCache.set(url, t);
+  }
+  return panoramaCache.get(url);
 }
 
 // Billboard quad with its pivot at the bottom center so wheelies/rolls
@@ -29,7 +49,7 @@ function makeQuad(texture, w, h, mirrorable = true) {
   const geo = new THREE.PlaneGeometry(w, h);
   geo.translate(0, h / 2, 0);
   const mat = new THREE.MeshBasicMaterial({
-    map: texture, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide,
+    map: texture, transparent: true, alphaTest: 0.12, side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.order = 'YXZ';
@@ -77,23 +97,35 @@ class PackCar {
     this.aiWheelieT = 0;
 
     const w = racer.spriteWidth;
-    // Select cards retain the Videomaker art. In-race named cars use centered
-    // front/rear cabinet sprites so they face down the road instead of baking
-    // a permanent 3/4 camera angle into every frame.
-    const namedRearT = tex.namedCarRearTexture(racer.id);
+    // Select cards retain the Videomaker originals. In-race named cars use
+    // high-resolution, straight-rear illustrated sprites; the canvas cabinet
+    // drawings remain only as a fallback and as a straight front angle.
+    const hasPremiumRear = !!racer.raceRearSprite && externalImageLoading;
+    const namedRearT = hasPremiumRear ? null : tex.namedCarRearTexture(racer.id);
     const namedFrontT = tex.namedCarFrontTexture(racer.id);
-    const rearT = namedRearT || (racer.rearSprite ? loadSprite(racer.rearSprite) : tex.rivalRearTexture(racer.color));
-    const frontT = namedFrontT || (racer.frontSprite ? loadSprite(racer.frontSprite) : rearT);
+    const rearT = hasPremiumRear
+      ? loadSprite(racer.raceRearSprite)
+      : namedRearT || (racer.rearSprite ? loadSprite(racer.rearSprite) : tex.rivalRearTexture(racer.color));
+    // Until matching premium fronts exist, keep the illustrated rear during a
+    // spin instead of popping to a 160x112 drawing mid-crash.
+    const frontT = hasPremiumRear
+      ? rearT
+      : namedFrontT || (racer.frontSprite ? loadSprite(racer.frontSprite) : rearT);
     const img = rearT.image;
-    const ratio = (img && img.height) ? img.height / img.width : 0.55;
-    this.h = w * (racer.rearSprite ? Math.max(0.45, Math.min(0.68, ratio)) : 0.72);
+    const ratio = hasPremiumRear
+      ? racer.raceRearAspect || 0.68
+      : (img && img.height) ? img.height / img.width : 0.55;
+    this.h = w * ((racer.rearSprite || hasPremiumRear) ? Math.max(0.45, Math.min(0.85, ratio)) : 0.72);
     this.rearT = rearT;
     this.frontT = frontT;
     this.mesh = makeQuad(rearT, w, this.h);
     // The old cabinet crop inflated the player by 55%, then parked the camera
     // almost on the rear bumper. Keep the hero car substantial, but leave
     // enough road in frame to read rivals and traffic.
-    this.visualScale = isPlayer ? 1.16 : 1;
+    // Keep the chase car prominent without letting it hide nearby traffic.
+    // Correct per-sprite aspect ratios provide the height; only a subtle
+    // player emphasis is needed now that the camera is higher and wider.
+    this.visualScale = isPlayer ? 1.04 : 1;
     this.showingFront = false;
     this.mirror = 1;
 
@@ -138,9 +170,13 @@ class Traffic {
     const colors = ['#4f8fe0', '#7fbf5a', '#c9c9d4', '#a065c9', '#e0b34f'];
     const color = colors[(Math.random() * colors.length) | 0];
     let t;
-    if (this.kind === 'semi') t = tex.semiFrontTexture();
+    if (this.kind === 'semi') t = externalImageLoading
+      ? loadSprite('assets/img/premium/traffic-semi-front.webp?v=visual-pass-1')
+      : tex.semiFrontTexture();
     else if (this.kind === 'bus') t = tex.busFrontTexture();
-    else t = oncoming ? tex.sedanFrontTexture(color) : tex.sedanRearTexture(color);
+    else if (oncoming && externalImageLoading) {
+      t = loadSprite('assets/img/premium/traffic-sedan-front.webp?v=visual-pass-1');
+    } else t = oncoming ? tex.sedanFrontTexture(color) : tex.sedanRearTexture(color);
     this.mesh = makeQuad(t, this.w, this.h);
     this.shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(this.w, this.w * 0.45),
@@ -208,8 +244,29 @@ export class Race {
     this.scene.add(this.track.group);
     // Long draw distance: haze starts far out, landmarks ignore fog entirely.
     this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, 260, 1150);
-    this.scene.background = new THREE.Color(opts.trackDef.sky[0]);
+    this.panoramaTexture = opts.trackDef.panorama && externalImageLoading
+      ? loadPanorama(opts.trackDef.panorama)
+      : null;
+    this.scene.background = this.panoramaTexture || new THREE.Color(opts.trackDef.sky[0]);
     this.camera = new THREE.PerspectiveCamera(71, 16 / 9, 0.5, 9000);
+    this.panoramaViewAspect = 0;
+    this.updatePanoramaCrop();
+
+    // Legend-style lighting discipline without mobile-expensive dynamic
+    // shadows: baked sprite lighting plus one warm key and a stage-tinted sky.
+    const lightProfiles = {
+      hawaii: { sky: 0xbfeaff, ground: 0x31593c, sun: 0xffdf9d, hemi: 1.65, key: 2.2 },
+      desert: { sky: 0xffd39a, ground: 0x563a2e, sun: 0xffb35c, hemi: 1.55, key: 2.35 },
+      tequila: { sky: 0x9b78d0, ground: 0x3a263d, sun: 0xffa55f, hemi: 1.45, key: 2.15 },
+    };
+    const lp = lightProfiles[opts.trackDef.id] || lightProfiles.hawaii;
+    this.scene.add(new THREE.HemisphereLight(lp.sky, lp.ground, lp.hemi));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+    const stageMid = this.track.frameAt(this.track.length * 0.5).pos;
+    const sun = new THREE.DirectionalLight(lp.sun, lp.key);
+    sun.position.copy(stageMid).add(new THREE.Vector3(-900, 1300, -700));
+    sun.target.position.copy(stageMid);
+    this.scene.add(sun, sun.target);
 
     this.cars = opts.racers.map((r, i) => {
       const car = new PackCar(r, this.track, !this.demo && i === opts.playerIndex, i);
@@ -1177,6 +1234,7 @@ export class Race {
   }
 
   updateCamera(dt) {
+    this.updatePanoramaCrop();
     const car = this.player;
     const mode = this.cameraMode;
     let anchorPos;
@@ -1193,7 +1251,7 @@ export class Race {
       lookPos = ahead.pos.clone();
     } else {
       const backDist = this.demo ? 15 : mode === 0 ? 13.5 : mode === 1 ? 8.5 : -1.2;
-      const aheadDist = this.demo ? 24 : mode === 0 ? 34 : mode === 1 ? 24 : 46;
+      const aheadDist = this.demo ? 29 : mode === 0 ? 40 : mode === 1 ? 26 : 46;
       const laneX = this.demo ? car.x * 0.75 : car.x;
       const backS = car.s - backDist;
       anchorPos = this.track.worldPos(Math.max(0, backS), laneX);
@@ -1212,7 +1270,9 @@ export class Race {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.55;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.4;
     }
-    lookPos.y += (mode === 2 ? 1.45 : 1.25) + car.yOff * 0.25;
+    // Aim closer to the horizon in high chase. This retains the requested
+    // elevated/wide traffic view without pitching 30 degrees into the road.
+    lookPos.y += (mode === 0 ? 3.65 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
     this.camera.lookAt(lookPos);
     const speed01 = Math.min(1, car.speed / 66);
     const baseFov = this.demo ? 62 : mode === 0 ? 66 : mode === 1 ? 68 : 72;
@@ -1225,6 +1285,24 @@ export class Race {
     this.cameraMode = (this.cameraMode + 1) % this.cameraModes.length;
     this.camInit = false;
     return this.cameraModes[this.cameraMode];
+  }
+
+  updatePanoramaCrop() {
+    if (!this.panoramaTexture || !this.camera) return;
+    const viewAspect = Math.max(0.1, this.camera.aspect || (16 / 9));
+    if (Math.abs(viewAspect - this.panoramaViewAspect) < 0.0001) return;
+    const artAspect = 16 / 9;
+    if (viewAspect > artAspect) {
+      const repeatY = artAspect / viewAspect;
+      this.panoramaTexture.repeat.set(1, repeatY);
+      this.panoramaTexture.offset.set(0, (1 - repeatY) * 0.5);
+    } else {
+      const repeatX = viewAspect / artAspect;
+      this.panoramaTexture.repeat.set(repeatX, 1);
+      this.panoramaTexture.offset.set((1 - repeatX) * 0.5, 0);
+    }
+    this.panoramaTexture.needsUpdate = true;
+    this.panoramaViewAspect = viewAspect;
   }
 
   hud() {

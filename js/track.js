@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=world-pass-3';
+import * as tex from './tex.js?v=visual-pass-1';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -12,6 +12,21 @@ export const SHOULDER = 8;         // drivable dirt beyond the asphalt
 
 const SAMPLE_STEP = 4;             // world units between precomputed frames
 const CHUNK = 128;                 // samples per road chunk (~512 units)
+
+function smoothSurfaceTexture(texture, anisotropy = 4) {
+  // Surface textures spend most of the race at a steep viewing angle. Linear
+  // mipmaps keep them crisp in the foreground without the glittering/pixel
+  // crawl that nearest filtering caused toward the horizon.
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = anisotropy;
+  return texture;
+}
+
+function colorShift(hex, lightness, saturation = 0) {
+  return new THREE.Color(hex).offsetHSL(0, saturation, lightness);
+}
 
 function buildCenterline(segments) {
   // Integrate heading over segments; control point every ~40 units.
@@ -90,6 +105,7 @@ export class Track {
 
     this.buildRoad();
     this.buildGroundAndSky();
+    this.buildTerrainRelief();
     this.buildOcean();
     this.buildProps();
     this.buildLandmarks();
@@ -150,6 +166,7 @@ export class Track {
 
   buildRibbon(fromX, toX, yLift, mat, uvScale, dropOuter = 0) {
     // Builds chunked ribbons along the road for culling-friendly rendering.
+    const meshes = [];
     for (let c0 = 0; c0 < this.samples; c0 += CHUNK) {
       const c1 = Math.min(c0 + CHUNK, this.samples);
       const verts = [];
@@ -172,63 +189,108 @@ export class Track {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geo.setIndex(idx);
+      geo.computeVertexNormals();
       geo.computeBoundingSphere();
-      this.group.add(new THREE.Mesh(geo, mat));
+      const mesh = new THREE.Mesh(geo, mat);
+      this.group.add(mesh);
+      meshes.push(mesh);
     }
+    return meshes;
   }
 
   buildRoad() {
     // Two-way asphalt: center double-yellow, dashed lane lines, edge lines.
     const roadTex = (() => {
       const c = document.createElement('canvas');
-      c.width = 128; c.height = 128;
+      c.width = 512; c.height = 512;
       const g = c.getContext('2d');
-      g.fillStyle = '#3a3a44'; g.fillRect(0, 0, 128, 128);
-      for (let i = 0; i < 700; i++) {
-        g.fillStyle = ['#42424e', '#34343c', '#3e3e48'][(Math.random() * 3) | 0];
-        g.fillRect((Math.random() * 128) | 0, (Math.random() * 128) | 0, 2, 2);
+      const asphalt = g.createLinearGradient(0, 0, 512, 0);
+      asphalt.addColorStop(0, '#303039');
+      asphalt.addColorStop(0.5, '#3d3d47');
+      asphalt.addColorStop(1, '#303039');
+      g.fillStyle = asphalt; g.fillRect(0, 0, 512, 512);
+      // Deterministic aggregate, tar seams, and tire wear give the road scale
+      // while avoiding a different noisy texture on every stage load.
+      for (let i = 0; i < 3600; i++) {
+        const x = Math.abs(Math.sin(i * 37.17) * 41391) % 512;
+        const y = Math.abs(Math.sin(i * 91.73 + 2.4) * 27431) % 512;
+        const shade = ['#4a4a55', '#292931', '#3a3a43', '#55555e'][i % 4];
+        const size = 0.7 + (i % 3) * 0.55;
+        g.globalAlpha = 0.16 + (i % 5) * 0.025;
+        g.fillStyle = shade;
+        g.fillRect(x, y, size, size);
       }
+      g.globalAlpha = 0.18;
+      g.strokeStyle = '#17171c'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(174, 0); g.bezierCurveTo(181, 150, 165, 330, 176, 512); g.stroke();
+      g.beginPath(); g.moveTo(338, 0); g.bezierCurveTo(329, 170, 346, 350, 335, 512); g.stroke();
+      g.globalAlpha = 1;
       g.fillStyle = '#f2f2e8';
-      g.fillRect(3, 0, 4, 128); g.fillRect(121, 0, 4, 128);
+      g.fillRect(12, 0, 12, 512); g.fillRect(488, 0, 12, 512);
       // Double yellow center.
       g.fillStyle = '#ffd23d';
-      g.fillRect(60, 0, 3, 128); g.fillRect(66, 0, 3, 128);
+      g.fillRect(240, 0, 10, 512); g.fillRect(262, 0, 10, 512);
       // Dashed white lane centers.
       g.fillStyle = '#d9d9cf';
-      g.fillRect(30, 10, 4, 38); g.fillRect(30, 74, 4, 38);
-      g.fillRect(94, 10, 4, 38); g.fillRect(94, 74, 4, 38);
+      for (let y = 34; y < 512; y += 256) {
+        g.fillRect(120, y, 12, 150);
+        g.fillRect(380, y, 12, 150);
+      }
+      // A faint dusty edge integrates the asphalt with each stage shoulder.
+      const dust = new THREE.Color(this.def.shoulder).getStyle();
+      const edge = g.createLinearGradient(0, 0, 512, 0);
+      edge.addColorStop(0, dust); edge.addColorStop(0.055, 'rgba(0,0,0,0)');
+      edge.addColorStop(0.945, 'rgba(0,0,0,0)'); edge.addColorStop(1, dust);
+      g.globalAlpha = 0.2; g.fillStyle = edge; g.fillRect(0, 0, 512, 512); g.globalAlpha = 1;
       const t = new THREE.CanvasTexture(c);
-      t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
-      t.generateMipmaps = false;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
       t.colorSpace = THREE.SRGBColorSpace;
-      return t;
+      return smoothSurfaceTexture(t, 8);
     })();
-    this.buildRibbon(ROAD_HALF, -ROAD_HALF, 0.05, new THREE.MeshBasicMaterial({ map: roadTex }), 14);
-    const shoulderMat = new THREE.MeshBasicMaterial({ color: this.def.shoulder });
+    this.buildRibbon(ROAD_HALF, -ROAD_HALF, 0.05, new THREE.MeshStandardMaterial({
+      map: roadTex, color: '#e4e4e8', roughness: 0.93, metalness: 0.015,
+    }), 14);
+
+    const shoulderTex = smoothSurfaceTexture(
+      tex.groundTexture(this.def.shoulder, this.def.groundDetail),
+      4,
+    );
+    shoulderTex.wrapS = shoulderTex.wrapT = THREE.RepeatWrapping;
+    shoulderTex.repeat.set(1, 1);
+    const shoulderMat = new THREE.MeshLambertMaterial({ map: shoulderTex, color: '#f4eadc' });
     this.buildRibbon(ROAD_HALF + SHOULDER, ROAD_HALF + 0.05, 0.0, shoulderMat, 10, -0.3);
     this.buildRibbon(-ROAD_HALF - 0.05, -ROAD_HALF - SHOULDER, 0.0, shoulderMat, 10, -0.3);
     // Embankment skirts down to the ground plane for elevated sections.
-    const skirtMat = new THREE.MeshBasicMaterial({ color: this.def.groundDetail });
-    this.buildRibbon(ROAD_HALF + SHOULDER + 26, ROAD_HALF + SHOULDER, 0, skirtMat, 10, 0);
+    const skirtMat = new THREE.MeshLambertMaterial({
+      color: colorShift(this.def.groundDetail, -0.045, 0.04),
+      flatShading: true,
+    });
+    const rightSkirts = this.buildRibbon(ROAD_HALF + SHOULDER + 26, ROAD_HALF + SHOULDER, 0, skirtMat, 10, 0);
     // (outer edge dropped to ground below)
-    this.group.children.slice(-Math.ceil(this.samples / CHUNK)).forEach((m) => {
+    rightSkirts.forEach((m) => {
       const pos = m.geometry.attributes.position;
       for (let i = 0; i < pos.count; i += 2) pos.setY(i, -0.6);
+      pos.needsUpdate = true;
+      m.geometry.computeVertexNormals();
+      m.geometry.computeBoundingSphere();
     });
-    this.buildRibbon(-ROAD_HALF - SHOULDER, -ROAD_HALF - SHOULDER - 26, 0, skirtMat, 10, 0);
-    this.group.children.slice(-Math.ceil(this.samples / CHUNK)).forEach((m) => {
+    const leftSkirts = this.buildRibbon(-ROAD_HALF - SHOULDER, -ROAD_HALF - SHOULDER - 26, 0, skirtMat, 10, 0);
+    leftSkirts.forEach((m) => {
       const pos = m.geometry.attributes.position;
       for (let i = 1; i < pos.count; i += 2) pos.setY(i, -0.6);
+      pos.needsUpdate = true;
+      m.geometry.computeVertexNormals();
+      m.geometry.computeBoundingSphere();
     });
   }
 
   buildGroundAndSky() {
     const groundT = tex.groundTexture(this.def.ground, this.def.groundDetail);
     groundT.repeat.set(160, 160);
+    smoothSurfaceTexture(groundT, 4);
     const g = new THREE.Mesh(
       new THREE.PlaneGeometry(7800, 7800),
-      new THREE.MeshBasicMaterial({ map: groundT }),
+      new THREE.MeshLambertMaterial({ map: groundT, color: '#eee7dc' }),
     );
     g.rotation.x = -Math.PI / 2;
     g.position.y = -0.6;
@@ -237,30 +299,106 @@ export class Track {
     g.position.x = mid.x; g.position.z = mid.z;
     this.group.add(g);
 
-    // Sky: gradient cylinder blending into the fog color at the horizon,
-    // plus a top cap disc so looking up never shows the void.
-    const skyColors = [this.def.sky[0], this.def.sky[1], this.def.fogColor];
-    const sky = new THREE.Mesh(
-      new THREE.CylinderGeometry(5600, 5600, 4200, 24, 1, true),
-      new THREE.MeshBasicMaterial({ map: tex.skyTexture(skyColors), side: THREE.BackSide, fog: false }),
-    );
-    sky.position.set(mid.x, 1300, mid.z);
-    this.group.add(sky);
-    const cap = new THREE.Mesh(
-      new THREE.CircleGeometry(5700, 24),
-      new THREE.MeshBasicMaterial({ color: this.def.sky[0], side: THREE.DoubleSide, fog: false }),
-    );
-    cap.rotation.x = Math.PI / 2;
-    cap.position.set(mid.x, 3350, mid.z);
-    this.group.add(cap);
+    // A generated panorama is installed as Scene.background by Race. In that
+    // case these opaque meshes would cover it completely, so retain the
+    // lightweight procedural sky only as an intentional fallback.
+    if (!this.def.panorama) {
+      const skyColors = [this.def.sky[0], this.def.sky[1], this.def.fogColor];
+      const sky = new THREE.Mesh(
+        new THREE.CylinderGeometry(5600, 5600, 4200, 24, 1, true),
+        new THREE.MeshBasicMaterial({ map: tex.skyTexture(skyColors), side: THREE.BackSide, fog: false }),
+      );
+      sky.position.set(mid.x, 1300, mid.z);
+      this.group.add(sky);
+      const cap = new THREE.Mesh(
+        new THREE.CircleGeometry(5700, 24),
+        new THREE.MeshBasicMaterial({ color: this.def.sky[0], side: THREE.DoubleSide, fog: false }),
+      );
+      cap.rotation.x = Math.PI / 2;
+      cap.position.set(mid.x, 3350, mid.z);
+      this.group.add(cap);
 
-    const sun = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: tex.sunTexture(this.def.id === 'desert' ? '#ffd06b' : '#fff3b0'),
-      fog: false, depthWrite: false,
-    }));
-    sun.scale.set(700, 700, 1);
-    sun.position.set(mid.x + 1500, 800, mid.z - 3200);
-    this.group.add(sun);
+      const sun = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex.sunTexture(this.def.id === 'desert' ? '#ffd06b' : '#fff3b0'),
+        fog: false, depthWrite: false,
+      }));
+      sun.scale.set(700, 700, 1);
+      sun.position.set(mid.x + 1500, 800, mid.z - 3200);
+      this.group.add(sun);
+    }
+  }
+
+  buildTerrainRelief() {
+    // Broad, low-poly land bands replace the dead-flat horizon without adding
+    // any colliders. They begin well outside the drivable shoulder, so this is
+    // a visual-only layer and cannot alter steering, shortcuts, or OOB rules.
+    const stageScale = this.def.id === 'desert' ? 1.45 : this.def.id === 'tequila' ? 1.05 : 0.78;
+    const materials = [
+      new THREE.MeshLambertMaterial({
+        color: colorShift(this.def.groundDetail, -0.015, 0.05),
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }),
+      new THREE.MeshLambertMaterial({
+        color: colorShift(this.def.ground, -0.08, 0.02),
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }),
+    ];
+    const innerOffset = ROAD_HALF + SHOULDER + 24;
+    const midOffset = innerOffset + 64;
+    const outerOffset = innerOffset + 190;
+
+    [-1, 1].forEach((side, sideIndex) => {
+      for (let c0 = 0; c0 < this.samples; c0 += CHUNK) {
+        const c1 = Math.min(c0 + CHUNK, this.samples);
+        // Match buildOcean's chunk-level zone choice so land and water never
+        // claim the same broad strip along a coast transition.
+        const zone = this.def.zones[this.zoneAt[c0]] || {};
+        const oceanSide = zone.ocean === 'right' ? 1 : zone.ocean === 'left' ? -1 : 0;
+        if (side === oceanSide) continue;
+
+        const verts = [];
+        const uvs = [];
+        const idx = [];
+        for (let i = c0; i <= c1; i++) {
+          const f = this.frames[i];
+          const phase = i * 0.071 + sideIndex * 2.9;
+          const broad = Math.sin(phase) * 0.55 + Math.sin(phase * 0.37 + 1.6) * 0.45;
+          const ridge = Math.max(0, broad) * 10 * stageScale;
+          const midRise = 1.2 + ridge * 0.35 + Math.sin(phase * 1.7) * 0.8;
+          const outerRise = 5 + ridge + Math.sin(phase * 0.53 + 0.8) * 3 * stageScale;
+          const inner = f.pos.clone().addScaledVector(f.left, side * innerOffset);
+          const middle = f.pos.clone().addScaledVector(f.left, side * midOffset);
+          const outer = f.pos.clone().addScaledVector(f.left, side * outerOffset);
+          verts.push(
+            inner.x, Math.max(-0.5, inner.y - 0.55), inner.z,
+            middle.x, middle.y - 0.45 + midRise, middle.z,
+            outer.x, outer.y - 0.55 + outerRise, outer.z,
+          );
+          const v = (i * SAMPLE_STEP) / 110;
+          uvs.push(0, v, 0.35, v, 1, v);
+          if (i < c1) {
+            const k = (i - c0) * 3;
+            // Keep winding upward on both sides of the centerline.
+            if (side > 0) {
+              idx.push(k, k + 1, k + 3, k + 1, k + 4, k + 3);
+              idx.push(k + 1, k + 2, k + 4, k + 2, k + 5, k + 4);
+            } else {
+              idx.push(k, k + 3, k + 1, k + 1, k + 3, k + 4);
+              idx.push(k + 1, k + 4, k + 2, k + 2, k + 4, k + 5);
+            }
+          }
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.setIndex(idx);
+        geo.computeVertexNormals();
+        geo.computeBoundingSphere();
+        this.group.add(new THREE.Mesh(geo, materials[(sideIndex + Math.floor(c0 / CHUNK)) % materials.length]));
+      }
+    });
   }
 
   buildOcean() {
@@ -268,7 +406,11 @@ export class Track {
     const zones = this.def.zones;
     const hasOcean = Object.values(zones).some((z) => z.ocean);
     if (!hasOcean) return;
-    const mat = new THREE.MeshBasicMaterial({ map: tex.oceanPlaneTexture() });
+    const oceanTex = smoothSurfaceTexture(tex.oceanPlaneTexture(), 4);
+    const mat = new THREE.MeshStandardMaterial({
+      map: oceanTex, color: '#b8e7ff', roughness: 0.28, metalness: 0.04,
+      side: THREE.DoubleSide,
+    });
     for (let c0 = 0; c0 < this.samples; c0 += CHUNK) {
       const zone = zones[this.zoneAt[c0]];
       if (!zone || !zone.ocean) continue;
@@ -291,6 +433,7 @@ export class Track {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geo.setIndex(idx);
+      geo.computeVertexNormals();
       geo.computeBoundingSphere();
       this.group.add(new THREE.Mesh(geo, mat));
     }
@@ -399,6 +542,10 @@ export class Track {
   buildLandmarks() {
     // Landmarks render with fog disabled so they read from far away.
     (this.def.landmarks || []).forEach((lm) => {
+      // The authored panoramas already carry the broad postcard silhouettes.
+      // Keep gates and near hero props in 3D, but do not stamp a second giant
+      // volcano, cruise ship, or mesa over the painted one.
+      if (this.def.panorama && ['volcano', 'cruiseShip', 'mesaBig'].includes(lm.kind)) return;
       const s = lm.at * this.length;
       const f = this.frameAt(s);
       const p = f.pos.clone().addScaledVector(f.left, lm.x);
@@ -432,7 +579,7 @@ export class Track {
   buildArchFrame(f, heading, label, bg, fg, half = ROAD_HALF + 2) {
     const group = new THREE.Group();
     const pillarGeo = new THREE.BoxGeometry(1.8, 10, 1.8);
-    const pillarMat = new THREE.MeshBasicMaterial({ color: '#c9c9d4' });
+    const pillarMat = new THREE.MeshLambertMaterial({ color: '#d7d2cb' });
     [half, -half].forEach((off) => {
       const p = new THREE.Mesh(pillarGeo, pillarMat);
       const pos = f.pos.clone().addScaledVector(f.left, off);
@@ -466,8 +613,10 @@ export class Track {
 
   buildRamps() {
     this.ramps = [];
-    const mat = new THREE.MeshBasicMaterial({ color: '#e0a53d', side: THREE.DoubleSide });
-    const side = new THREE.MeshBasicMaterial({ color: '#b5761f', side: THREE.DoubleSide });
+    const mat = new THREE.MeshLambertMaterial({
+      color: '#e7ad43', side: THREE.DoubleSide, emissive: '#2a1603', emissiveIntensity: 0.22,
+    });
+    const side = new THREE.MeshLambertMaterial({ color: '#9e611d', side: THREE.DoubleSide });
     (this.def.ramps || []).forEach((u) => {
       const s = u * this.length;
       const f0 = this.frameAt(s);
@@ -486,6 +635,7 @@ export class Track {
         tl.x, tl.y + hgt, tl.z, tr.x, tr.y + hgt, tr.z,
       ], 3));
       geo.setIndex([0, 2, 1, 1, 2, 3]);
+      geo.computeVertexNormals();
       this.group.add(new THREE.Mesh(geo, mat));
       const back = new THREE.BufferGeometry();
       back.setAttribute('position', new THREE.Float32BufferAttribute([
@@ -493,6 +643,7 @@ export class Track {
         tl.x, tl.y - 0.4, tl.z, tr.x, tr.y - 0.4, tr.z,
       ], 3));
       back.setIndex([0, 1, 2, 1, 3, 2]);
+      back.computeVertexNormals();
       this.group.add(new THREE.Mesh(back, side));
       this.ramps.push({ s, len: 11, hgt, cx, halfW: w / 2 });
     });
@@ -566,7 +717,8 @@ export class Track {
       frames.push({ pos, tan, left: new THREE.Vector3(-tan.z, 0, tan.x) });
     }
     // Dirt road mesh.
-    const mat = new THREE.MeshBasicMaterial({ map: tex.dirtRoadTexture() });
+    const dirtTex = smoothSurfaceTexture(tex.dirtRoadTexture(), 4);
+    const mat = new THREE.MeshLambertMaterial({ map: dirtTex, color: '#f0d2a5' });
     const verts = []; const uvs = []; const idx = [];
     const w = 9;
     for (let i = 0; i <= n; i++) {
@@ -585,6 +737,7 @@ export class Track {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.setIndex(idx);
+    geo.computeVertexNormals();
     geo.computeBoundingSphere();
     this.group.add(new THREE.Mesh(geo, mat));
 

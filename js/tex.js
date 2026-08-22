@@ -1,5 +1,5 @@
-// Canvas-generated chunky 90s textures. Everything is drawn at low
-// resolution and sampled with NearestFilter for that digitized arcade look.
+// Canvas-authored arcade textures. The silhouettes keep their cabinet-era
+// character, while smooth sampling prevents pixel crawl beside the new art.
 import * as THREE from '../vendor/three.module.js';
 
 function canvas(w, h) {
@@ -10,9 +10,10 @@ function canvas(w, h) {
 
 function tex(c, repeatX = 1, repeatY = 1) {
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 2;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeatX, repeatY);
   t.colorSpace = THREE.SRGBColorSpace;

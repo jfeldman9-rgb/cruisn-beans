@@ -55,8 +55,8 @@ Math.random = () => {
 const [{ RACERS, RIVALS, STAGES }, { Race }, tex, trackModule] = await Promise.all([
   import('../js/data.js'),
   import('../js/game.js'),
-  import('../js/tex.js?v=world-pass-3'),
-  import('../js/track.js?v=world-pass-3'),
+  import('../js/tex.js?v=visual-pass-1'),
+  import('../js/track.js?v=visual-pass-1'),
 ]);
 
 const {
@@ -78,12 +78,19 @@ race.camera.updateProjectionMatrix();
 
 const assetPath = (url) => path.join(ROOT, String(url).split('?')[0]);
 const selectArt = new Map();
+const raceArt = new Map();
 for (const racer of RACERS) {
   selectArt.set(racer.id, {
     portrait: await loadImage(assetPath(racer.portrait)),
     car: await loadImage(assetPath(racer.carSprite)),
   });
+  if (racer.raceRearSprite) raceArt.set(racer.id, await loadImage(assetPath(racer.raceRearSprite)));
 }
+for (const racer of RIVALS) {
+  if (racer.raceRearSprite) raceArt.set(racer.id, await loadImage(assetPath(racer.raceRearSprite)));
+}
+const stagePanorama = await loadImage(assetPath(hawaii.panorama));
+const premiumTruck = await loadImage(assetPath('assets/img/premium/traffic-semi-front.webp'));
 
 function sceneCanvas() {
   const canvas = createCanvas(WIDTH, HEIGHT);
@@ -205,20 +212,19 @@ function lineWorld(g, s0, s1, offset, color, width) {
 }
 
 function drawSkyAndIsland(g, options = {}) {
-  const sky = g.createLinearGradient(0, 0, 0, 390);
-  sky.addColorStop(0, hawaii.sky[0]);
-  sky.addColorStop(0.62, hawaii.sky[1]);
-  sky.addColorStop(1, hawaii.sky[2]);
-  g.fillStyle = sky;
-  g.fillRect(0, 0, WIDTH, HEIGHT);
+  // Use the same full-bleed authored panorama that the WebGL scene installs
+  // behind its real geometry. This remains a watermarked software composition,
+  // but it now validates the production asset rather than a flat placeholder.
+  fitImage(g, stagePanorama, 0, 0, WIDTH, HEIGHT, false);
+  const atmosphere = g.createLinearGradient(0, 0, 0, HEIGHT);
+  atmosphere.addColorStop(0, 'rgba(28,58,112,0.05)');
+  atmosphere.addColorStop(0.62, 'rgba(255,188,91,0.02)');
+  atmosphere.addColorStop(1, 'rgba(18,42,35,0.18)');
+  g.fillStyle = atmosphere; g.fillRect(0, 0, WIDTH, HEIGHT);
 
-  // Sun and ocean are deliberately broad; the road geometry overlays them.
-  const sun = g.createRadialGradient(1060, 120, 4, 1060, 120, 88);
-  sun.addColorStop(0, '#fffde2'); sun.addColorStop(0.28, '#fff3a3'); sun.addColorStop(1, 'rgba(255,240,150,0)');
-  g.fillStyle = sun; g.fillRect(940, 0, 240, 240);
-  g.fillStyle = '#399b54'; g.fillRect(0, 270, WIDTH, HEIGHT - 270);
+  // The road geometry overlays broad ocean/ground depth cues.
   const ocean = g.createLinearGradient(820, 290, 1280, 650);
-  ocean.addColorStop(0, '#59bdec'); ocean.addColorStop(1, '#075fae');
+  ocean.addColorStop(0, 'rgba(89,189,236,0.36)'); ocean.addColorStop(1, 'rgba(7,95,174,0.48)');
   g.fillStyle = ocean;
   g.beginPath();
   g.moveTo(785, 284); g.lineTo(WIDTH, 260); g.lineTo(WIDTH, HEIGHT); g.lineTo(920, HEIGHT); g.closePath();
@@ -228,14 +234,8 @@ function drawSkyAndIsland(g, options = {}) {
     g.beginPath(); g.moveTo(910 + (y - 330) * 0.15, y); g.lineTo(1260, y - 13); g.stroke();
   }
 
-  if (options.postcard) {
-    const volcano = tex.volcanoTexture().image;
-    g.globalAlpha = 0.9;
-    g.drawImage(volcano, 18, 116, 460, 230);
-    g.globalAlpha = 1;
-    const ship = tex.cruiseShipTexture().image;
-    g.drawImage(ship, 965, 225, 250, 84);
-  }
+  // Volcano, resort, cruise ship, coastline and palms are authored directly
+  // into the panorama; no duplicate pixel billboards are added here.
 }
 
 function drawRoad(g, maxAhead = 900) {
@@ -298,7 +298,7 @@ function drawBillboard(g, image, s, x, worldW, worldH, options = {}) {
   g.translate(box.x + (options.shiftX || 0), box.y + (options.shiftY || 0));
   g.rotate(options.rotate || 0);
   g.globalAlpha = options.alpha ?? 1;
-  g.imageSmoothingEnabled = false;
+  g.imageSmoothingEnabled = true;
   g.drawImage(image, -w / 2, -h, w, h);
   g.restore();
   return { ...box, w, h };
@@ -323,19 +323,22 @@ function drawGate(g, s, kind = 'aloha') {
 }
 
 function drawNamedCar(g, racer, s, x, options = {}) {
-  const image = (options.front ? tex.namedCarFrontTexture(racer.id) : tex.namedCarRearTexture(racer.id)).image;
-  const ratio = image.height / image.width;
+  const image = options.front
+    ? tex.namedCarFrontTexture(racer.id).image
+    : raceArt.get(racer.id) || tex.namedCarRearTexture(racer.id).image;
+  const ratio = racer.raceRearAspect || image.height / image.width;
   const worldW = racer.spriteWidth * (options.player ? race.player.visualScale : 1);
-  const worldH = worldW * Math.min(0.68, Math.max(0.45, ratio));
+  const worldH = worldW * Math.min(0.85, Math.max(0.45, ratio));
   return drawBillboard(g, image, s, x, worldW, worldH, options);
 }
 
 function drawGenericCar(g, rival, s, x, options = {}) {
-  return drawBillboard(g, tex.rivalRearTexture(rival.color).image, s, x, rival.spriteWidth, rival.spriteWidth * 0.72, options);
+  const image = raceArt.get(rival.id) || tex.rivalRearTexture(rival.color).image;
+  return drawBillboard(g, image, s, x, rival.spriteWidth, rival.spriteWidth * (rival.raceRearAspect || 0.68), options);
 }
 
 function drawTruck(g, s, x = LANE_PLAYER, options = {}) {
-  return drawBillboard(g, tex.semiFrontTexture().image, s, x, 7.4, 6.6, options);
+  return drawBillboard(g, premiumTruck, s, x, 7.4, 6.6, options);
 }
 
 function drawHud(g, options = {}) {
@@ -371,7 +374,7 @@ function cameraEvidenceBadge(g) {
   const expectedFov = 66 + Math.min(1, car.speed / 66) * 7;
   roundedRect(g, 22, 50, 338, 88, 10, 'rgba(8,6,30,0.82)', '#9db2ff', 2);
   label(g, 'ACTUAL CAMERA CONFIG', 42, 76, 15, '#ffd23d');
-  label(g, 'HIGH CHASE • 13.5 BACK • 8.25 UP', 42, 103, 15, '#ffffff');
+  label(g, 'HIGH CHASE • 13.5 BACK • 8.25 UP • LEVEL AIM', 42, 103, 13, '#ffffff');
   label(g, `FOV ${expectedFov.toFixed(1)}° • PLAYER SCALE ${car.visualScale.toFixed(2)}×`, 42, 126, 15, '#ffffff');
 }
 
@@ -573,7 +576,7 @@ async function save(canvas, filename, title) {
       const portrait = selectArt.get(racer.id).portrait;
       fitImage(g, portrait, 532, y + 3, 58, 50);
     } else {
-      fitImage(g, tex.rivalRearTexture(racer.color).image, 532, y + 3, 58, 50);
+      fitImage(g, raceArt.get(racer.id) || tex.rivalRearTexture(racer.color).image, 532, y + 3, 58, 50);
     }
     label(g, racer.name, 615, y + 36, 20, '#ffffff');
     label(g, selected ? '2:07.251' : 'DNF', 1205, y + 36, 19, selected ? '#7dff8b' : '#9db2ff', 'right');

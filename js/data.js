@@ -13,6 +13,8 @@ export const RACERS = [
     carSprite: 'assets/img/sm/andy-car.png?v=videomaker-3',
     rearSprite: 'assets/img/sm/andy-car-rear.png?v=videomaker-3',
     frontSprite: 'assets/img/sm/andy-car.png?v=videomaker-3',
+    raceRearSprite: 'assets/img/premium/andy-race-rear.webp?v=visual-pass-1',
+    raceRearAspect: 0.81,
     spriteWidth: 5.4,
     stats: { speed: 0.9, grip: 0.75, wheelie: 0.8 },
     topSpeed: 64,
@@ -29,6 +31,8 @@ export const RACERS = [
     carSprite: 'assets/img/sm/adam-car.png?v=videomaker-3',
     rearSprite: 'assets/img/sm/adam-car-rear.png?v=videomaker-3',
     frontSprite: 'assets/img/sm/adam-car.png?v=videomaker-3',
+    raceRearSprite: 'assets/img/premium/adam-race-rear.webp?v=visual-pass-1',
+    raceRearAspect: 0.72,
     spriteWidth: 5.4,
     stats: { speed: 0.8, grip: 0.9, wheelie: 0.7 },
     topSpeed: 62,
@@ -45,6 +49,8 @@ export const RACERS = [
     carSprite: 'assets/img/sm/lance-car.png?v=videomaker-3',
     rearSprite: 'assets/img/sm/lance-car-rear.png?v=videomaker-3',
     frontSprite: 'assets/img/sm/lance-car.png?v=videomaker-3',
+    raceRearSprite: 'assets/img/premium/lance-race-rear.webp?v=visual-pass-1',
+    raceRearAspect: 0.77,
     spriteWidth: 6.0,
     stats: { speed: 0.7, grip: 0.65, wheelie: 1.0 },
     topSpeed: 60,
@@ -61,6 +67,8 @@ export const RACERS = [
     carSprite: 'assets/img/sm/elon-car.png?v=videomaker-3',
     rearSprite: 'assets/img/sm/elon-car-rear.png?v=videomaker-3',
     frontSprite: 'assets/img/sm/elon-car.png?v=videomaker-3',
+    raceRearSprite: 'assets/img/premium/elon-race-rear.webp?v=visual-pass-1',
+    raceRearAspect: 0.81,
     spriteWidth: 5.2,
     stats: { speed: 1.0, grip: 0.7, wheelie: 0.6 },
     topSpeed: 66,
@@ -70,11 +78,11 @@ export const RACERS = [
   },
 ];
 
-// Generic cabinet rivals filling out the pack (canvas-drawn sprites).
+// Authored cabinet rivals filling out the seven-car pack.
 export const RIVALS = [
-  { id: 'rival1', name: 'BIG SAL', car: 'MEATBALL EXPRESS', color: '#d9612c', topSpeed: 60, accel: 20, aiSkill: 0.88, spriteWidth: 5.4 },
-  { id: 'rival2', name: 'TINA T.', car: 'PINK LIGHTNING', color: '#e654a8', topSpeed: 63, accel: 24, aiSkill: 0.92, spriteWidth: 5.2 },
-  { id: 'rival3', name: 'HOT ROD HAL', car: 'THE FLAMER', color: '#3a7fd9', topSpeed: 62, accel: 22, aiSkill: 0.9, spriteWidth: 5.3 },
+  { id: 'rival1', name: 'BIG SAL', car: 'MEATBALL EXPRESS', color: '#d9612c', raceRearSprite: 'assets/img/premium/rival-orange-rear.webp?v=visual-pass-1', raceRearAspect: 0.66, topSpeed: 60, accel: 20, aiSkill: 0.88, spriteWidth: 5.4 },
+  { id: 'rival2', name: 'TINA T.', car: 'PINK LIGHTNING', color: '#e654a8', raceRearSprite: 'assets/img/premium/rival-pink-rear.webp?v=visual-pass-1', raceRearAspect: 0.64, topSpeed: 63, accel: 24, aiSkill: 0.92, spriteWidth: 5.2 },
+  { id: 'rival3', name: 'HOT ROD HAL', car: 'THE FLAMER', color: '#3a7fd9', raceRearSprite: 'assets/img/premium/rival-blue-rear.webp?v=visual-pass-1', raceRearAspect: 0.67, topSpeed: 62, accel: 22, aiSkill: 0.9, spriteWidth: 5.3 },
 ];
 
 export const STAGES = [
@@ -82,6 +90,7 @@ export const STAGES = [
     id: 'hawaii',
     name: 'HAWAII COAST',
     blurb: 'OCEAN HIGHWAY \u2022 VOLCANO \u2022 BIG AIR',
+    panorama: 'assets/env/hawaii-panorama.webp?v=visual-pass-1',
     sky: ['#4faaff', '#9fdcff', '#ffe9b8'],
     ground: '#3fa24d',
     groundDetail: '#2f8a3e',
@@ -133,6 +142,7 @@ export const STAGES = [
     id: 'desert',
     name: 'DESERT HIGHWAY',
     blurb: 'US-66 TO THE MESAS \u2022 COWS \u2022 SHIMMER',
+    panorama: 'assets/env/desert-panorama.webp?v=visual-pass-1',
     sky: ['#ff9a3d', '#ffcf6b', '#ffe9c2'],
     ground: '#d9a05a',
     groundDetail: '#c08a48',
@@ -181,6 +191,7 @@ export const STAGES = [
     id: 'tequila',
     name: 'TEQUILA TOWN',
     blurb: 'DRIVE THRU TOWN \u2022 PICADO \u2022 NEON CANTINA',
+    panorama: 'assets/env/tequila-panorama.webp?v=visual-pass-1',
     sky: ['#2b1a5e', '#7c3fa0', '#ff9d5c'],
     ground: '#a86f3d',
     groundDetail: '#8f5c30',

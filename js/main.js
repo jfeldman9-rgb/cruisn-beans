@@ -1,10 +1,10 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=world-pass-3';
-import { Race } from './game.js?v=world-pass-3';
-import { Input } from './input.js?v=world-pass-3';
-import { audio } from './audio.js?v=world-pass-3';
-import { rivalRearTexture } from './tex.js?v=world-pass-3';
+import { RACERS, RIVALS, STAGES } from './data.js?v=visual-pass-1';
+import { Race } from './game.js?v=visual-pass-1';
+import { Input } from './input.js?v=visual-pass-1';
+import { audio } from './audio.js?v=visual-pass-1';
+import { rivalRearTexture } from './tex.js?v=visual-pass-1';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 if (Number.isFinite(seedParam) && seedParam > 0) {
@@ -18,13 +18,19 @@ if (Number.isFinite(seedParam) && seedParam > 0) {
 const $ = (sel) => document.querySelector(sel);
 
 const canvas = $('#game');
+const desktopQuality = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const renderPixelRatio = Math.min(window.devicePixelRatio || 1, desktopQuality ? 1.5 : 1.1);
+document.body.classList.toggle('desktop-input', desktopQuality);
 let renderer;
 let webglAvailable = true;
 try {
   renderer = new THREE.WebGLRenderer({
-    canvas, antialias: false, powerPreference: 'high-performance', stencil: false,
+    canvas, antialias: true, powerPreference: 'high-performance', stencil: false,
   });
-  renderer.setPixelRatio(1);
+  renderer.setPixelRatio(renderPixelRatio);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.04;
 } catch (error) {
   // Keep menus usable and surface a clear failure instead of leaving a black
   // page when a locked-down browser disables WebGL.
@@ -43,8 +49,8 @@ input.bindSteerSurface($('#steer-surface'));
 input.bindHoldButton($('#btn-brake'), 'brake');
 input.bindGasPad($('#btn-gas'));
 
-const desktopQuality = matchMedia('(hover: hover) and (pointer: fine)').matches;
-const maxRenderScale = desktopQuality ? 1 : 0.78;
+const maxRenderScale = desktopQuality ? 1 : 0.9;
+const minRenderScale = 0.72;
 let renderScale = maxRenderScale;
 let race = null;
 let mode = 'title';
@@ -61,6 +67,7 @@ let passTimer = 0;
 // Rival portraits are generated from their canvas car sprites.
 const rivalPortraits = new Map();
 function rivalPortrait(rival) {
+  if (rival.raceRearSprite) return rival.raceRearSprite;
   if (!rivalPortraits.has(rival.id)) {
     rivalPortraits.set(rival.id, rivalRearTexture(rival.color).image.toDataURL());
   }
@@ -103,9 +110,16 @@ function startDemo() {
 // arrived. Do not let the first select screen open until every portrait and
 // car angle has decoded at least once.
 const startBtn = $('#btn-start');
-const artUrls = [...new Set(RACERS.flatMap((racer) => [
-  racer.portrait, racer.carSprite, racer.rearSprite, racer.frontSprite,
-]))];
+const artUrls = [...new Set([
+  ...RACERS.flatMap((racer) => [
+    racer.portrait, racer.carSprite, racer.rearSprite, racer.frontSprite,
+    racer.raceRearSprite,
+  ]),
+  ...RIVALS.map((racer) => racer.raceRearSprite),
+  ...STAGES.map((stage) => stage.panorama),
+  'assets/img/premium/traffic-semi-front.webp?v=visual-pass-1',
+  'assets/img/premium/traffic-sedan-front.webp?v=visual-pass-1',
+].filter(Boolean))];
 
 function loadArt(url, attempt = 0) {
   return new Promise((resolve) => {
@@ -435,8 +449,10 @@ function loop(now) {
   fpsAcc += dt; fpsN++; fpsT += dt;
   if (fpsT > 2 && fpsN > 10) {
     const avg = fpsN / fpsAcc;
-    if (avg < 45 && renderScale > 0.5) { renderScale -= 0.1; resize(); }
-    else if (avg > 57 && renderScale < maxRenderScale) {
+    if (document.visibilityState === 'visible' && avg < 45 && renderScale > minRenderScale) {
+      renderScale = Math.max(minRenderScale, renderScale - 0.08);
+      resize();
+    } else if (document.visibilityState === 'visible' && avg > 57 && renderScale < maxRenderScale) {
       renderScale = Math.min(maxRenderScale, renderScale + 0.05);
       resize();
     }
