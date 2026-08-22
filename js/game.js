@@ -4,7 +4,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=visual-pass-1';
 import * as tex from './tex.js?v=visual-pass-1';
-import { audio } from './audio.js?v=visual-pass-1';
+import { audio } from './audio.js?v=soundtrack-pass-1';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;

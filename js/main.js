@@ -1,9 +1,9 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
 import { RACERS, RIVALS, STAGES } from './data.js?v=visual-pass-1';
-import { Race } from './game.js?v=visual-pass-1';
+import { Race } from './game.js?v=soundtrack-pass-1';
 import { Input } from './input.js?v=visual-pass-1';
-import { audio } from './audio.js?v=visual-pass-1';
+import { audio } from './audio.js?v=soundtrack-pass-1';
 import { rivalRearTexture } from './tex.js?v=visual-pass-1';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
@@ -257,7 +257,7 @@ function startRace() {
     return false;
   }
   if (race) race.dispose();
-  audio.stopMusic();
+  audio.startMusic('countdown');
   // ?time=N overrides the starting clock (testing). ?short=1 starts near the end.
   const params = new URLSearchParams(location.search);
   const trackDef = { ...STAGES[chosenStage] };
@@ -322,7 +322,7 @@ const PLACE_NAMES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
 
 function showResults(data) {
   audio.stopEngine();
-  audio.stopMusic();
+  audio.startMusic('results');
   const title = $('#results-title');
   if (data.timeUp) {
     title.textContent = 'TIME UP!';
@@ -372,8 +372,8 @@ function paintMute() {
   muteBtn.classList.toggle('muted', audio.muted);
 }
 muteBtn.addEventListener('click', () => {
-  audio.resume();
   audio.toggleMuted();
+  audio.resume();
   paintMute();
 });
 window.addEventListener('keydown', (e) => {
@@ -394,14 +394,29 @@ $('#btn-camera').addEventListener('click', () => {
 });
 paintMute();
 
-function firstGesture() {
-  audio.resume();
-  if (!musicStarted && mode === 'title') {
-    musicStarted = true;
-    audio.startMusic('title');
-  }
+function detachFirstGesture() {
   window.removeEventListener('pointerdown', firstGesture);
   window.removeEventListener('keydown', firstGesture);
+}
+
+function firstGesture(event) {
+  // Tapping mute must not create a one-frame music blip before the click
+  // handler silences it. Keep listening for the next actual start gesture.
+  if ((event.type === 'pointerdown' && event.target?.closest?.('#btn-mute'))
+    || (event.type === 'keydown' && event.key?.toLowerCase() === 'm')) return;
+  audio.resume();
+  if (musicStarted || mode !== 'title') return;
+  const started = audio.startMusic('title');
+  if (started && typeof started.then === 'function') {
+    started.then((playing) => {
+      if (!playing) return;
+      musicStarted = true;
+      detachFirstGesture();
+    });
+  } else if (started) {
+    musicStarted = true;
+    detachFirstGesture();
+  }
 }
 window.addEventListener('pointerdown', firstGesture);
 window.addEventListener('keydown', firstGesture);
@@ -477,6 +492,7 @@ requestAnimationFrame(loop);
 window.__cb = {
   get race() { return race; },
   get webglAvailable() { return webglAvailable; },
+  get audio() { return audio.status(); },
   input,
   startRace: (r, s) => { chosenRacer = r; chosenStage = s; startRace(); },
   scenario(name) {

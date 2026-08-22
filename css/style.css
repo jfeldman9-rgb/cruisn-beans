@@ -94,6 +94,7 @@ html, body {
   font-size: clamp(8px, 1.6vh, 12px);
   color: #9db2ff; letter-spacing: 1px; line-height: 1.7;
 }
+.soundtrack-credit { color: var(--yellow); text-shadow: 0 2px 7px rgba(0,0,0,0.9); }
 
 .big-btn {
   font-family: inherit;

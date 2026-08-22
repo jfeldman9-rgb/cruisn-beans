@@ -1,5 +1,13 @@
-// All-synth WebAudio: engine, comedy fart turbo, jingles, chip music.
-// No audio files needed, everything is generated.
+// Streaming soundtrack plus WebAudio engine, cabinet calls, and stunt SFX.
+// The synth sequencer remains as a fallback if the MP3 cannot play.
+
+const SOUNDTRACK_URL = 'assets/audio/cruisn-the-world.mp3?v=soundtrack-pass-1';
+const MUSIC_LEVELS = Object.freeze({
+  title: 0.22,
+  countdown: 0.16,
+  race: 0.28,
+  results: 0.18,
+});
 
 class AudioBox {
   constructor() {
@@ -9,6 +17,48 @@ class AudioBox {
     this.engineNodes = null;
     this.fartNodes = null;
     this.music = null;
+    this.musicMode = 'title';
+    this.musicWanted = false;
+    this.songFailed = false;
+    this.pausedForVisibility = false;
+    this.song = null;
+
+    // A media element streams the 3:27 song instead of decoding roughly
+    // 70 MB of stereo PCM into memory - materially safer on iPhones.
+    if (typeof Audio !== 'undefined') {
+      try {
+        this.song = new Audio(SOUNDTRACK_URL);
+        this.song.loop = true;
+        this.song.preload = 'auto';
+        this.song.playsInline = true;
+        this.song.volume = MUSIC_LEVELS.title;
+        this.song.muted = this.muted;
+        if (this.song.addEventListener) {
+          this.song.addEventListener('error', () => {
+            this.songFailed = true;
+            if (this.musicWanted) this.startChipMusic(this.musicMode);
+          });
+        }
+      } catch (error) {
+        this.song = null;
+        this.songFailed = true;
+      }
+    }
+
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', () => {
+        if (!this.song) return;
+        if (document.hidden) {
+          if (!this.song.paused) {
+            this.pausedForVisibility = true;
+            this.song.pause();
+          }
+        } else if (this.pausedForVisibility && this.musicWanted) {
+          this.pausedForVisibility = false;
+          this.playSong();
+        }
+      });
+    }
   }
 
   ensure() {
@@ -24,6 +74,8 @@ class AudioBox {
 
   resume() {
     if (this.ensure() && this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.musicWanted && this.song && !this.songFailed
+      && (typeof document === 'undefined' || !document.hidden)) this.playSong();
   }
 
   setMuted(m) {
@@ -31,6 +83,13 @@ class AudioBox {
     localStorage.setItem('cb_muted', m ? '1' : '0');
     if (this.master) {
       this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.02);
+    }
+    if (this.song) this.song.muted = m;
+    // Speech cancellation is not guaranteed to fire its utterance callbacks
+    // on Safari, so always clear any announcer duck explicitly.
+    this.setSongLevel(this.musicMode);
+    if (m && typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
   }
 
@@ -46,11 +105,19 @@ class AudioBox {
     const now = performance.now();
     if (this.lastAnnounce && now - this.lastAnnounce < 650) return;
     this.lastAnnounce = now;
+    const synth = window.speechSynthesis;
+    synth.cancel();
     const voice = new window.SpeechSynthesisUtterance(line);
     voice.rate = 1.06;
     voice.pitch = 0.72;
     voice.volume = 0.82;
-    window.speechSynthesis.speak(voice);
+    const restoreMusic = () => this.setSongLevel(this.musicMode);
+    voice.onstart = () => {
+      if (this.song && !this.song.paused) this.song.volume = Math.min(0.09, this.song.volume);
+    };
+    voice.onend = restoreMusic;
+    voice.onerror = restoreMusic;
+    synth.speak(voice);
   }
 
   // ---- one-shots ----
@@ -211,7 +278,7 @@ class AudioBox {
     this.engineNodes.o1.frequency.setTargetAtTime(base, t, 0.05);
     this.engineNodes.o2.frequency.setTargetAtTime(base * 1.01 + 1, t, 0.05);
     this.engineNodes.f.frequency.setTargetAtTime(320 + speed01 * 900, t, 0.1);
-    this.engineNodes.g.gain.setTargetAtTime(0.05 + speed01 * 0.1, t, 0.1);
+    this.engineNodes.g.gain.setTargetAtTime(0.07 + speed01 * 0.15, t, 0.1);
   }
 
   stopEngine() {
@@ -260,11 +327,66 @@ class AudioBox {
     this.fartNodes = null;
   }
 
-  // ---- chip music ----
-  // Simple lookahead step sequencer. Patterns are arrays of midi notes (0 = rest).
+  // ---- soundtrack / radio ----
   startMusic(kind) {
-    if (!this.ensure()) return;
-    this.stopMusic();
+    this.musicMode = Object.hasOwn(MUSIC_LEVELS, kind) ? kind : 'race';
+    this.musicWanted = true;
+    this.setSongLevel(this.musicMode);
+    if (this.song && !this.songFailed) {
+      this.stopChipMusic();
+      return this.playSong();
+    }
+    return this.startChipMusic(this.musicMode);
+  }
+
+  setSongLevel(kind) {
+    if (!this.song) return;
+    this.song.volume = MUSIC_LEVELS[kind] ?? MUSIC_LEVELS.race;
+  }
+
+  status() {
+    return {
+      mode: this.musicMode,
+      wanted: this.musicWanted,
+      source: this.song?.currentSrc || this.song?.src || null,
+      paused: this.song ? this.song.paused : null,
+      currentTime: this.song ? this.song.currentTime : null,
+      volume: this.song ? this.song.volume : null,
+      muted: this.muted,
+      fallback: !!this.music,
+    };
+  }
+
+  playSong() {
+    if (!this.song || this.songFailed) return false;
+    let attempt;
+    try {
+      attempt = this.song.play();
+    } catch (error) {
+      if (error?.name === 'NotAllowedError' || error?.name === 'AbortError') return false;
+      this.songFailed = true;
+      return this.startChipMusic(this.musicMode);
+    }
+    if (!attempt || typeof attempt.then !== 'function') return true;
+    return attempt.then(() => {
+      this.stopChipMusic();
+      return true;
+    }).catch((error) => {
+      // Autoplay rejection is temporary; the next real gesture gets another
+      // chance. Decode/network errors fall back to the generated cabinet loop.
+      if (!error || (error.name !== 'NotAllowedError' && error.name !== 'AbortError')) {
+        this.songFailed = true;
+        return this.startChipMusic(this.musicMode);
+      }
+      return false;
+    });
+  }
+
+  // ---- chip-music fallback ----
+  // Simple lookahead step sequencer. Patterns are arrays of midi notes (0 = rest).
+  startChipMusic(kind) {
+    if (!this.ensure()) return false;
+    this.stopChipMusic();
     const bass = kind === 'title'
       ? [38, 0, 38, 0, 41, 0, 43, 0, 38, 0, 38, 0, 46, 45, 43, 41]
       : [36, 36, 0, 36, 39, 0, 36, 0, 41, 41, 0, 41, 43, 0, 39, 0];
@@ -291,6 +413,7 @@ class AudioBox {
     };
     state.timer = setInterval(tick, 50);
     this.music = state;
+    return true;
   }
 
   note(freq, when, dur, type, vol, out) {
@@ -321,11 +444,23 @@ class AudioBox {
     src.start(when); src.stop(when + dur + 0.02);
   }
 
-  stopMusic() {
+  stopChipMusic() {
     if (!this.music) return;
     clearInterval(this.music.timer);
     try { this.music.gain.disconnect(); } catch (e) { /* fine */ }
     this.music = null;
+  }
+
+  stopMusic(rewind = false) {
+    this.musicWanted = false;
+    this.pausedForVisibility = false;
+    if (this.song) {
+      this.song.pause();
+      if (rewind) {
+        try { this.song.currentTime = 0; } catch (error) { /* metadata not ready */ }
+      }
+    }
+    this.stopChipMusic();
   }
 }
 
