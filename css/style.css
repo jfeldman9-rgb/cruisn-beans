@@ -95,6 +95,7 @@ html, body {
   color: #9db2ff; letter-spacing: 1px; line-height: 1.7;
 }
 .soundtrack-credit { color: var(--yellow); text-shadow: 0 2px 7px rgba(0,0,0,0.9); }
+#title-records { color: #b9ffb0; letter-spacing: 1.5px; text-shadow: 0 2px 7px rgba(0,0,0,0.9); }
 
 .big-btn {
   font-family: inherit;
@@ -194,6 +195,31 @@ html, body {
   border: 1px solid rgba(255,210,61,0.45);
   border-radius: 5px;
   padding: 0.25em 0.65em;
+}
+
+.card-tag.best { color: #b9ffb0; letter-spacing: 1.5px; }
+.card-tag.best b { color: var(--yellow); }
+
+/* World Tour entry sits under the three stage cards. */
+.tour-card {
+  width: min(92vw, 980px);
+  flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 0.6vh 2vw;
+  padding: 1vh 2vw;
+  border-color: var(--pink);
+  background: linear-gradient(120deg, rgba(120, 26, 96, 0.86), rgba(35, 14, 78, 0.9));
+}
+.tour-card .card-name { color: #fff; text-shadow: 0 2px 0 #5c0c34, 0 0 18px rgba(255, 90, 162, 0.6); }
+.tour-card .card-tag { color: #ffd9ec; }
+.tour-card .card-tag.target { color: var(--yellow); }
+.tour-badge {
+  position: absolute; top: 0; left: 0;
+  padding: 3px 10px;
+  font-size: clamp(8px, 1.6vh, 11px);
+  letter-spacing: 2px;
+  color: #3a0b24;
+  background: var(--yellow);
+  border-radius: 0 0 8px 0;
 }
 
 .card-stats { width: 88%; display: flex; flex-direction: column; gap: 3px; }
@@ -301,14 +327,72 @@ html, body {
 #hud-time.low { color: var(--red); animation: blink 0.5s steps(2) infinite; }
 .hud-box.pos span { color: var(--yellow); }
 
+/* Analog cabinet speedo: a conic arc with a needle, MPH readout inside. */
+#speedo {
+  position: absolute; bottom: max(1.2vh, env(safe-area-inset-bottom)); left: 50%;
+  transform: translateX(-50%);
+  width: clamp(150px, 30vh, 230px);
+  height: clamp(78px, 15.6vh, 120px);
+  pointer-events: none;
+}
+.speedo-arc {
+  position: absolute; inset: 0;
+  border-radius: 999px 999px 0 0;
+  background: conic-gradient(from 270deg at 50% 100%,
+    var(--green) 0deg, #a4e32e 62deg, var(--yellow) 105deg, #ff8a2b 140deg, var(--red) 172deg, transparent 180deg);
+  -webkit-mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+}
+.speedo-ticks {
+  position: absolute; inset: 0;
+  border-radius: 999px 999px 0 0;
+  background: repeating-conic-gradient(from 270deg at 50% 100%, rgba(0,0,0,0.55) 0deg 1.5deg, transparent 1.5deg 18deg);
+  -webkit-mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+}
+#speedo-needle {
+  position: absolute; left: 50%; bottom: 0;
+  width: 4px; height: 86%;
+  margin-left: -2px;
+  background: linear-gradient(180deg, #fff, var(--red) 70%, #7a0b10);
+  border-radius: 3px 3px 0 0;
+  transform-origin: 50% 100%;
+  transform: rotate(-90deg);
+  box-shadow: 0 0 6px rgba(255,255,255,0.7);
+  transition: transform 0.08s linear;
+}
+#speedo-needle::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -7px;
+  width: 16px; height: 16px; margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #b8b8c8 55%, #3b3b48);
+  border: 2px solid #111;
+}
+#speedo.wheelie .speedo-arc { filter: drop-shadow(0 0 12px rgba(160, 255, 120, 0.9)) brightness(1.25); }
 #hud-mph {
-  position: absolute; bottom: max(2vh, env(safe-area-inset-bottom)); left: 50%;
+  position: absolute; bottom: 16%; left: 50%;
   transform: translateX(-50%) skewX(-8deg);
-  color: #fff; font-size: clamp(16px, 4vh, 30px);
+  color: #fff; font-size: clamp(15px, 3.6vh, 28px);
   text-shadow: 0 2px 0 #000, 0 0 12px rgba(255, 210, 61, 0.5);
   pointer-events: none;
-  padding: 0.18em 0.65em;
-  background: linear-gradient(90deg, transparent, rgba(4,5,18,0.56), transparent);
+  padding: 0.1em 0.55em;
+  white-space: nowrap;
+  background: linear-gradient(90deg, transparent, rgba(4,5,18,0.7), transparent);
+}
+
+/* Confetti for a win / championship. */
+#confetti { position: fixed; inset: 0; z-index: 28; pointer-events: none; overflow: hidden; }
+#confetti i {
+  position: absolute; top: -4vh;
+  width: 10px; height: 16px;
+  border-radius: 2px;
+  animation: confetti-fall 2.8s cubic-bezier(0.2, 0.6, 0.6, 1) forwards;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(112vh) rotate(720deg); opacity: 0.9; }
 }
 
 #countdown {
@@ -542,7 +626,68 @@ html, body {
 .result-row .rpos { color: var(--yellow); width: 3ch; text-align: left; }
 .result-row .rname { flex: 1; text-align: left; letter-spacing: 2px; }
 .result-row .rtime { color: #9db2ff; }
+.result-row .rpts { color: var(--yellow); min-width: 5ch; text-align: right; }
+.result-row.record .rtime { color: var(--green); }
 .results-btns { display: flex; gap: 3vw; margin-top: 1vh; }
+
+/* Records strip under the standings. */
+#records-strip {
+  font-size: clamp(9px, 1.9vh, 14px);
+  color: #9db2ff;
+  letter-spacing: 1.5px;
+  min-height: 1.3em;
+}
+#records-strip b { color: var(--yellow); }
+#records-strip .new { color: var(--green); }
+
+/* Arcade initials entry: shown before the standings on a new record. */
+#initials-entry {
+  display: none;
+  flex-direction: column; align-items: center; gap: 1.6vh;
+  padding: 1.6vh 3vw;
+  background: linear-gradient(120deg, rgba(8, 60, 24, 0.9), rgba(6, 22, 60, 0.9));
+  border: 2px solid var(--green);
+  border-radius: 14px;
+  box-shadow: 0 0 34px rgba(47, 174, 63, 0.5), 0 18px 48px rgba(0,0,0,0.5);
+}
+#screen-results.entering #initials-entry { display: flex; }
+#screen-results.entering #results-list,
+#screen-results.entering #records-strip,
+#screen-results.entering #finale-gag,
+#screen-results.entering .results-btns { display: none; }
+.initials-head {
+  color: var(--green);
+  font-size: clamp(16px, 4vh, 30px);
+  letter-spacing: 2px;
+  text-shadow: 0 3px 0 #0b3a12;
+  animation: blink 0.9s steps(2) infinite;
+}
+.initials-head span { color: var(--yellow); margin-left: 0.4em; }
+.initials-head small { display: block; margin-top: 0.4vh; color: #b9ffb0; font-size: 0.42em; letter-spacing: 1.5px; animation: none; }
+.initials-slots { display: flex; gap: 2.4vw; }
+.slot {
+  display: flex; flex-direction: column; align-items: center; gap: 0.4vh;
+}
+.slot-letter {
+  display: flex; align-items: center; justify-content: center;
+  width: clamp(48px, 11vh, 84px); height: clamp(56px, 13vh, 100px);
+  font-size: clamp(30px, 8vh, 62px);
+  color: var(--yellow);
+  background: rgba(0,0,0,0.5);
+  border: 3px solid rgba(255,210,61,0.5);
+  border-radius: 10px;
+  text-shadow: 0 3px 0 #7a2c00;
+  cursor: pointer;
+}
+.slot.active .slot-letter { border-color: #fff; box-shadow: 0 0 18px rgba(255,255,255,0.5); animation: blink 0.7s steps(2) infinite; }
+.slot button {
+  font: inherit; font-size: clamp(12px, 2.6vh, 18px);
+  width: clamp(44px, 9vh, 70px); height: clamp(26px, 5vh, 36px);
+  color: #fff; background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.5); border-radius: 7px; cursor: pointer;
+}
+.slot button:active { background: rgba(255,255,255,0.35); }
+#btn-initials-ok { font-size: clamp(14px, 3.2vh, 24px); padding: 0.9vh 5vw; }
 
 /* ---------- mute ---------- */
 #btn-mute {
@@ -664,4 +809,12 @@ body.no-webgl #webgl-warning.attention { animation: webgl-attention 0.55s steps(
   .result-row .rname { letter-spacing: 1px; }
   .results-btns { margin-top: 2px; }
   .results-btns .big-btn { font-size: 13px; padding: 5px 20px; border-width: 2px; border-radius: 8px; }
+  #records-strip { font-size: 9px; }
+  #initials-entry { gap: 6px; padding: 8px 16px; }
+  .initials-head { font-size: 15px; }
+  .slot-letter { width: 44px; height: 50px; font-size: 28px; }
+  .slot button { width: 40px; height: 22px; font-size: 11px; }
+  #btn-initials-ok { font-size: 13px; padding: 5px 24px; border-width: 2px; }
+  .tour-card { padding: 4px 12px; gap: 2px 12px; }
+  .cards.tracks .track-art { height: 15vh; }
 }

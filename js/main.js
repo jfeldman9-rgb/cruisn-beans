@@ -1,10 +1,15 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=finish-fight-1';
-import { Race } from './game.js?v=finish-fight-1';
-import { Input } from './input.js?v=finish-fight-1';
-import { audio } from './audio.js?v=finish-fight-1';
-import { rivalRearTexture } from './tex.js?v=finish-fight-1';
+import { RACERS, RIVALS, STAGES } from './data.js?v=next-level-1';
+import { Race } from './game.js?v=next-level-1';
+import { Input } from './input.js?v=next-level-1';
+import { audio } from './audio.js?v=next-level-1';
+import { rivalRearTexture } from './tex.js?v=next-level-1';
+import { Records, defaultInitials, formatTime as fmtTime } from './records.js?v=next-level-1';
+import {
+  createTour, currentStageId, isFinalStage, recordLeg, standings as tourStandings,
+  playerStanding, advance as advanceTour,
+} from './tour.js?v=next-level-1';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 if (Number.isFinite(seedParam) && seedParam > 0) {
@@ -63,6 +68,20 @@ let hintShown = false;
 let musicStarted = false;
 let lastClockBeep = -1;
 let passTimer = 0;
+let tour = null;
+
+// Local cabinet records. localStorage can throw in private/sandboxed
+// contexts; the Records class falls back to memory for the session.
+const records = new Records((() => {
+  try {
+    const probe = '__cb_probe__';
+    window.localStorage.setItem(probe, '1');
+    window.localStorage.removeItem(probe);
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+})());
 
 // Rival portraits are generated from their canvas car sprites.
 const rivalPortraits = new Map();
@@ -184,9 +203,42 @@ function buildRacerCards() {
 $('#btn-racer-back').addEventListener('click', () => show('title'));
 
 // ---------- stage select ----------
+function bestLine(stageId) {
+  const best = records.best(stageId);
+  return best
+    ? `BEST <b>${fmtTime(best.time)}</b> ${best.initials}`
+    : 'NO RECORD YET \u2022 SET ONE';
+}
+
+function paintStageBests() {
+  STAGES.forEach((t) => {
+    const el = $(`#best-${t.id}`);
+    if (el) el.innerHTML = bestLine(t.id);
+  });
+  const tb = records.tourBest();
+  $('#tour-best').textContent = tb
+    ? `CHAMPION ${tb.initials} \u2022 ${tb.points} PTS \u2022 ${fmtTime(tb.time)}`
+    : 'NO CHAMPION YET';
+}
+
+function paintTitleRecords() {
+  const el = $('#title-records');
+  if (!el) return;
+  const parts = STAGES.map((t) => {
+    const best = records.best(t.id);
+    return `${t.name.split(' ')[0]} ${best ? `${fmtTime(best.time)} ${best.initials}` : '\u2014'}`;
+  });
+  const tb = records.tourBest();
+  parts.push(`TOUR ${tb ? `${tb.points} PTS ${tb.initials}` : '\u2014'}`);
+  el.textContent = `RECORDS \u2022 ${parts.join(' \u2022 ')}`;
+}
+
 function buildStageCards() {
   const wrap = $('#track-cards');
-  if (wrap.childElementCount) return;
+  if (wrap.childElementCount) {
+    paintStageBests();
+    return;
+  }
   STAGES.forEach((t, i) => {
     const card = document.createElement('button');
     card.className = `card track-card track-${t.id}`;
@@ -195,16 +247,26 @@ function buildStageCards() {
       <div class="track-art track-art-${t.id}"></div>
       <div class="card-tag">${t.blurb}</div>
       <div class="card-tag small">POINT TO POINT \u2022 7-CAR FIELD</div>
-      <div class="card-tag target">TARGET ${t.targetTime}</div>`;
+      <div class="card-tag target">TARGET ${t.targetTime}</div>
+      <div class="card-tag best" id="best-${t.id}"></div>`;
     card.addEventListener('click', () => {
+      tour = null;
       chosenStage = i;
       audio.beep(880, 0.12, 'square', 0.25);
       startRace();
     });
     wrap.appendChild(card);
   });
+  paintStageBests();
 }
 $('#btn-track-back').addEventListener('click', () => show('racer'));
+
+$('#btn-tour').addEventListener('click', () => {
+  tour = createTour(STAGES.map((t) => t.id));
+  chosenStage = 0;
+  audio.beep(1040, 0.14, 'square', 0.25);
+  startRace();
+});
 
 // ---------- race ----------
 const toastEl = $('#toast');
@@ -258,6 +320,7 @@ function startRace() {
   }
   if (race) race.dispose();
   audio.startMusic('countdown');
+  if (tour) chosenStage = Math.max(0, STAGES.findIndex((t) => t.id === currentStageId(tour)));
   // ?time=N overrides the starting clock (testing). ?short=1 starts near the end.
   const params = new URLSearchParams(location.search);
   const trackDef = { ...STAGES[chosenStage] };
@@ -288,6 +351,42 @@ function startRace() {
   setTimeout(() => race && race.startCountdown(), 800);
 }
 
+// Phone haptics for the beats a cabinet would sell with a force-feedback
+// wheel. No-op where vibrate() is unavailable (iOS Safari, desktop).
+const HAPTICS = {
+  wheelie: 18,
+  leapfrog: [20, 30, 45],
+  checkpoint: [30, 40, 30],
+  stunt: [15, 25, 15, 25, 40],
+  bump: 45,
+  crash: [90, 50, 120],
+  go: 60,
+  finish: [40, 40, 40, 40, 140],
+  win: [40, 40, 40, 40, 60, 40, 220],
+  timeup: [200, 80, 200],
+};
+function buzz(kind) {
+  const pattern = HAPTICS[kind];
+  if (!pattern || typeof navigator.vibrate !== 'function' || audio.muted) return;
+  try { navigator.vibrate(pattern); } catch (error) { /* unsupported */ }
+}
+
+const confettiEl = $('#confetti');
+function confetti(count = 48) {
+  const colors = ['#ffd23d', '#e8262d', '#2fae3f', '#ff5aa2', '#4f8fe0', '#fff'];
+  confettiEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('i');
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = `${Math.random() * 1.2}s`;
+    piece.style.animationDuration = `${2.2 + Math.random() * 1.4}s`;
+    piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+    confettiEl.appendChild(piece);
+  }
+  setTimeout(() => { confettiEl.innerHTML = ''; }, 4200);
+}
+
 function onRaceEvent(kind, data) {
   if (kind === 'count') {
     showCount(String(data));
@@ -298,71 +397,242 @@ function onRaceEvent(kind, data) {
     audio.countdownBeep(true);
     audio.startMusic('race');
     audio.announce('Go, go, go!');
+    buzz('go');
     $('#hint').classList.remove('show');
   } else if (kind === 'checkpoint') {
     showCheckpoint(data);
   } else if (kind === 'toast') {
     toast(data);
+  } else if (kind === 'haptic') {
+    buzz(data);
   } else if (kind === 'rivalPass') {
     showRivalPass(data);
   } else if (kind === 'finish') {
-    setTimeout(() => showResults(data), 900);
+    // Let the finish crane play before the standings on a real finish.
+    setTimeout(() => showResults(data), data.timeUp ? 900 : 2300);
   }
 }
 
 input.onFirstInput = () => $('#hint').classList.remove('show');
 
-// ---------- results ----------
-function fmtTime(t) {
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
-  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
-}
+// ---------- initials entry (arcade record board) ----------
 const PLACE_NAMES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const resultsScreen = $('#screen-results');
+const slotEls = [...document.querySelectorAll('#initials-entry .slot')];
+let initials = ['A', 'A', 'A'];
+let activeSlot = 0;
+let initialsResolve = null;
 
-function showResults(data) {
+function paintInitials() {
+  slotEls.forEach((slot, i) => {
+    slot.classList.toggle('active', i === activeSlot);
+    slot.querySelector('.slot-letter').textContent = initials[i];
+  });
+}
+
+function cycleLetter(slot, dir) {
+  const idx = ALPHABET.indexOf(initials[slot]);
+  initials[slot] = ALPHABET[(idx + dir + ALPHABET.length) % ALPHABET.length];
+  activeSlot = slot;
+  audio.beep(dir > 0 ? 760 : 640, 0.05, 'square', 0.18);
+  paintInitials();
+}
+
+function enterInitials(rank, seed) {
+  initials = seed.split('');
+  activeSlot = 0;
+  $('#initials-rank').textContent = `#${rank}`;
+  resultsScreen.classList.add('entering');
+  paintInitials();
+  return new Promise((resolve) => { initialsResolve = resolve; });
+}
+
+function finishInitials() {
+  if (!initialsResolve) return;
+  resultsScreen.classList.remove('entering');
+  const done = initialsResolve;
+  initialsResolve = null;
+  audio.beep(990, 0.14, 'square', 0.25);
+  done(initials.join(''));
+}
+
+slotEls.forEach((slot, i) => {
+  slot.querySelector('.slot-up').addEventListener('click', () => cycleLetter(i, 1));
+  slot.querySelector('.slot-down').addEventListener('click', () => cycleLetter(i, -1));
+  slot.querySelector('.slot-letter').addEventListener('click', () => { activeSlot = i; paintInitials(); });
+});
+$('#btn-initials-ok').addEventListener('click', finishInitials);
+window.addEventListener('keydown', (e) => {
+  if (!initialsResolve) return;
+  const key = e.key;
+  if (key.length === 1 && ALPHABET.includes(key.toUpperCase())) {
+    initials[activeSlot] = key.toUpperCase();
+    activeSlot = Math.min(2, activeSlot + 1);
+    audio.beep(760, 0.05, 'square', 0.18);
+  } else if (key === 'Backspace' || key === 'ArrowLeft') {
+    activeSlot = Math.max(0, activeSlot - 1);
+  } else if (key === 'ArrowRight') {
+    activeSlot = Math.min(2, activeSlot + 1);
+  } else if (key === 'ArrowUp') {
+    cycleLetter(activeSlot, 1);
+  } else if (key === 'ArrowDown') {
+    cycleLetter(activeSlot, -1);
+  } else if (key === 'Enter' || key === ' ') {
+    finishInitials();
+  } else {
+    return;
+  }
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  paintInitials();
+}, true);
+
+// ---------- results ----------
+function resultRow(place, racer, isPlayer, right, extraClass = '', pts = null) {
+  const row = document.createElement('div');
+  row.className = `result-row ${isPlayer ? 'me' : ''} ${extraClass}`;
+  const img = racer.portrait || rivalPortrait(racer);
+  row.innerHTML = `
+    <span class="rpos">${PLACE_NAMES[place - 1]}</span>
+    <img src="${img}" alt="${racer.name}">
+    <span class="rname">${racer.name}</span>
+    ${pts === null ? '' : `<span class="rpts">${pts}</span>`}
+    <span class="rtime">${right}</span>`;
+  return row;
+}
+
+function paintRecordsStrip(stageId, newRank) {
+  const strip = $('#records-strip');
+  const rows = records.list(stageId);
+  if (!rows.length) {
+    strip.innerHTML = 'STAGE RECORDS \u2022 NONE YET';
+    return;
+  }
+  strip.innerHTML = `STAGE RECORDS \u2022 ${rows.map((r, i) => {
+    const text = `${i + 1}. <b>${fmtTime(r.time)}</b> ${r.initials}`;
+    return i + 1 === newRank ? `<span class="new">${text} NEW!</span>` : text;
+  }).join(' \u2022 ')}`;
+}
+
+async function showResults(data) {
   audio.stopEngine();
   audio.startMusic('results');
+  const stage = STAGES[chosenStage];
+  const racer = RACERS[chosenRacer];
   const title = $('#results-title');
+  const sub = $('#results-sub');
+  const finaleGag = $('#finale-gag');
+  const list = $('#results-list');
+  const strip = $('#records-strip');
+  const retryBtn = $('#btn-retry');
+  list.innerHTML = '';
+  strip.innerHTML = '';
+
+  // World Tour bookkeeping.
+  let finalLeg = false;
+  let standing = null;
+  if (tour) {
+    if (data.timeUp) {
+      tour.over = true;
+    } else {
+      recordLeg(tour, data.results, data.officialTime);
+      finalLeg = isFinalStage(tour);
+    }
+    standing = playerStanding(tour);
+  }
+
+  const official = `OFFICIAL ${fmtTime(data.officialTime)}${data.stuntCredit > 0 ? ` \u2022 STUNT CUT -${data.stuntCredit.toFixed(1)}s` : ''} \u2022 STUNTS ${data.stunts} \u2022 BEANS ${data.beans}`;
   if (data.timeUp) {
     title.textContent = 'TIME UP!';
     title.className = 'lose';
+    sub.textContent = tour ? 'TOUR OVER \u2022 THE ROAD WON' : 'THE ROAD WON THIS TIME...';
+    finaleGag.textContent = 'THE BEAN COUNCIL DEMANDS A REMATCH.';
+  } else if (tour && finalLeg) {
+    const champion = standing && standing.place === 1;
+    title.textContent = champion ? 'WORLD CHAMPION!' : `TOUR ${PLACE_NAMES[standing.place - 1]}!`;
+    title.className = champion ? 'win' : '';
+    sub.textContent = `TOUR TOTAL ${standing.points} PTS \u2022 ${fmtTime(tour.playerTime)} \u2022 FINAL STAGE ${PLACE_NAMES[data.place - 1]}`;
+    finaleGag.textContent = champion
+      ? 'THREE COUNTRIES. ONE CAN OF BEANS. LEGEND.'
+      : 'THE WORLD HAS BEEN CRUISED. MOSTLY.';
   } else {
     title.textContent = `${PLACE_NAMES[data.place - 1]} PLACE!`;
     title.className = data.place === 1 ? 'win' : '';
+    sub.textContent = tour && standing
+      ? `${official} \u2022 TOUR ${PLACE_NAMES[standing.place - 1]} \u2022 ${standing.points} PTS`
+      : official;
+    if (racer.id === 'elon') finaleGag.textContent = 'ELON MISSED THE MOON EXIT. BEANS DELIVERED.';
+    else if (racer.id === 'lance') finaleGag.textContent = 'LANCE BROUGHT THE VAN HOME IN STYLE.';
+    else finaleGag.textContent = data.place === 1 ? 'THE BEAN COUNCIL APPROVES.' : 'POSTCARD ACQUIRED. DIGNITY OPTIONAL.';
   }
-  $('#results-sub').textContent = data.timeUp
-    ? 'THE ROAD WON THIS TIME...'
-    : `OFFICIAL ${fmtTime(data.officialTime)}${data.stuntCredit > 0 ? ` \u2022 STUNT CUT -${data.stuntCredit.toFixed(1)}s` : ''} \u2022 STUNTS ${data.stunts} \u2022 BEANS ${data.beans}`;
-  const finaleGag = $('#finale-gag');
-  if (data.timeUp) finaleGag.textContent = 'THE BEAN COUNCIL DEMANDS A REMATCH.';
-  else if (RACERS[chosenRacer].id === 'elon') finaleGag.textContent = 'ELON MISSED THE MOON EXIT. BEANS DELIVERED.';
-  else if (RACERS[chosenRacer].id === 'lance') finaleGag.textContent = 'LANCE BROUGHT THE VAN HOME IN STYLE.';
-  else finaleGag.textContent = data.place === 1 ? 'THE BEAN COUNCIL APPROVES.' : 'POSTCARD ACQUIRED. DIGNITY OPTIONAL.';
-  const list = $('#results-list');
-  list.innerHTML = '';
-  data.results.forEach((r, i) => {
-    const row = document.createElement('div');
-    row.className = `result-row ${r.isPlayer ? 'me' : ''}`;
-    const img = r.racer.portrait || rivalPortrait(r.racer);
-    row.innerHTML = `
-      <span class="rpos">${PLACE_NAMES[i]}</span>
-      <img src="${img}" alt="${r.racer.name}">
-      <span class="rname">${r.racer.name}</span>
-      <span class="rtime">${r.finished ? fmtTime(r.time) : 'DNF'}</span>`;
-    list.appendChild(row);
-  });
+  retryBtn.textContent = tour
+    ? (data.timeUp || finalLeg ? 'NEW TOUR' : 'NEXT STAGE \u25B6')
+    : 'RETRY';
   show('results');
+  if (!data.timeUp && (data.place === 1 || (tour && finalLeg && standing && standing.place === 1))) {
+    confetti(tour && finalLeg ? 90 : 48);
+  }
+
+  // Record boards: single stages keep a top-3 per stage, the tour keeps one champion.
+  let newRank = 0;
+  if (!tour && !data.timeUp) {
+    newRank = records.rankFor(stage.id, data.officialTime);
+    if (newRank) {
+      audio.checkpoint();
+      audio.announce('New record! Enter your initials!');
+      const ini = await enterInitials(newRank, defaultInitials(racer.name));
+      records.submit(stage.id, { time: data.officialTime, initials: ini, racerId: racer.id });
+    }
+  } else if (tour && finalLeg && standing && records.tourQualifies(standing.points, tour.playerTime)) {
+    audio.checkpoint();
+    audio.announce('New world tour champion! Enter your initials!');
+    const ini = await enterInitials(1, defaultInitials(racer.name));
+    records.submitTour({ points: standing.points, time: tour.playerTime, initials: ini, racerId: racer.id });
+  }
+
+  if (tour && (finalLeg || data.timeUp)) {
+    // Final tour standings by points.
+    tourStandings(tour).forEach((row, i) => {
+      list.appendChild(resultRow(i + 1, row.racer, row.isPlayer, `${row.points} PTS`, '', row.wins ? `${row.wins}W` : null));
+    });
+    const tb = records.tourBest();
+    strip.innerHTML = tb
+      ? `TOUR CHAMPION \u2022 <b>${tb.initials}</b> ${tb.points} PTS \u2022 ${fmtTime(tb.time)}`
+      : 'TOUR CHAMPION \u2022 NONE YET';
+  } else {
+    data.results.forEach((r, i) => {
+      const pts = tour ? `+${[10, 8, 6, 5, 4, 3, 2][i] || 1}` : null;
+      const isRecord = r.isPlayer && newRank > 0;
+      list.appendChild(resultRow(i + 1, r.racer, r.isPlayer, r.finished ? fmtTime(r.time) : 'DNF', isRecord ? 'record' : '', pts));
+    });
+    if (tour && standing) {
+      strip.innerHTML = `TOUR STANDINGS \u2022 YOU ${PLACE_NAMES[standing.place - 1]} WITH <b>${standing.points} PTS</b> \u2022 STAGE ${tour.index + 1}/${tour.stageIds.length} DONE`;
+    } else {
+      paintRecordsStrip(stage.id, newRank);
+    }
+  }
+  paintStageBests();
+  paintTitleRecords();
 }
 
 $('#btn-retry').addEventListener('click', () => {
   audio.beep(700, 0.1, 'square', 0.25);
+  if (tour) {
+    if (tour.over || isFinalStage(tour)) {
+      tour = createTour(STAGES.map((t) => t.id));
+    } else {
+      advanceTour(tour);
+    }
+  }
   startRace();
 });
 $('#btn-title').addEventListener('click', () => {
   audio.beep(500, 0.1, 'square', 0.25);
+  tour = null;
   startDemo();
   show('title');
+  paintTitleRecords();
   audio.startMusic('title');
 });
 
@@ -426,6 +696,9 @@ const hudTime = $('#hud-time');
 const hudCp = $('#hud-cp');
 const hudPos = $('#hud-pos');
 const hudMph = $('#hud-mph');
+const speedo = $('#speedo');
+const speedoNeedle = $('#speedo-needle');
+const SPEEDO_MAX_MPH = 170;
 const hudBeans = $('#hud-beans');
 const hudProgress = $('#hud-progress-fill');
 const hudLocation = $('#hud-location');
@@ -439,6 +712,8 @@ function paintHUD() {
   hudCp.textContent = `CP ${h.cp}/${h.cps}`;
   hudPos.textContent = `${PLACE_NAMES[h.place - 1]}/${h.total}`;
   hudMph.textContent = `${h.mph} MPH`;
+  speedoNeedle.style.transform = `rotate(${-90 + 180 * Math.min(1, h.mph / SPEEDO_MAX_MPH)}deg)`;
+  speedo.classList.toggle('wheelie', h.wheelie);
   hudBeans.textContent = `\u00d7${h.beans}`;
   hudProgress.style.width = `${(h.progress * 100).toFixed(1)}%`;
   $('#btn-gas').classList.toggle('active', h.wheelie);
@@ -486,6 +761,7 @@ function loop(now) {
 startDemo();
 resize();
 show('title');
+paintTitleRecords();
 requestAnimationFrame(loop);
 
 // Debug handle for deterministic acceptance tests and evidence capture.
@@ -493,8 +769,13 @@ window.__cb = {
   get race() { return race; },
   get webglAvailable() { return webglAvailable; },
   get audio() { return audio.status(); },
+  get tour() { return tour; },
+  get mode() { return mode; },
+  records,
   input,
-  startRace: (r, s) => { chosenRacer = r; chosenStage = s; startRace(); },
+  startRace: (r, s) => { tour = null; chosenRacer = r; chosenStage = s; startRace(); },
+  startTour: (r) => { chosenRacer = r; $('#btn-tour').click(); },
+  finishInitials,
   scenario(name) {
     if (!race || mode !== 'race') return false;
     const p = race.player;

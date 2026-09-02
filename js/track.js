@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=finish-fight-1';
+import * as tex from './tex.js?v=next-level-1';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -12,6 +12,11 @@ export const SHOULDER = 8;         // drivable dirt beyond the asphalt
 
 const SAMPLE_STEP = 4;             // world units between precomputed frames
 const CHUNK = 128;                 // samples per road chunk (~512 units)
+// Straight road built past the FINISH so cars coast through the arch during
+// the finish camera instead of freezing at the edge of the world. Stage
+// fractions (checkpoints, ramps, landmarks) are measured against `length`,
+// which excludes this run-off, so authored stage data is unaffected.
+const RUNOFF = 260;
 
 function smoothSurfaceTexture(texture, anisotropy = 4) {
   // Surface textures spend most of the race at a steep viewing angle. Linear
@@ -53,11 +58,15 @@ export class Track {
     this.group = new THREE.Group();
     this.billboardLandmarks = [];
 
-    const pts = buildCenterline(def.segments);
+    const lastSeg = def.segments[def.segments.length - 1];
+    const runoff = { len: RUNOFF, bend: 0, dh: 0, zone: lastSeg.zone };
+    const pts = buildCenterline([...def.segments, runoff]);
     this.curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.4);
-    this.length = this.curve.getLength();
+    this.roadLength = this.curve.getLength();
+    const authoredLen = def.segments.reduce((sum, s) => sum + s.len, 0);
+    this.length = this.roadLength * (authoredLen / (authoredLen + RUNOFF));
 
-    const n = Math.ceil(this.length / SAMPLE_STEP);
+    const n = Math.ceil(this.roadLength / SAMPLE_STEP);
     this.samples = n;
     this.frames = [];
     for (let i = 0; i <= n; i++) {
@@ -72,12 +81,12 @@ export class Track {
     // Zone lookup per sample.
     this.zoneAt = new Array(n + 1);
     let acc = 0;
-    const zoneRanges = def.segments.map((s) => {
+    const zoneRanges = [...def.segments, runoff].map((s) => {
       const r = { from: acc, to: acc + s.len, zone: s.zone };
       acc += s.len;
       return r;
     });
-    const totalDef = acc;
+    const totalDef = acc - RUNOFF;
     this.crests = [];
     let boundary = 0;
     for (let i = 0; i < def.segments.length - 1; i++) {
@@ -97,7 +106,7 @@ export class Track {
       }
     }
     for (let i = 0; i <= n; i++) {
-      const s = (i / n) * this.length;
+      const s = (i / n) * this.roadLength;
       const sDef = (s / this.length) * totalDef;
       const zr = zoneRanges.find((r) => sDef >= r.from && sDef <= r.to) || zoneRanges[zoneRanges.length - 1];
       this.zoneAt[i] = zr.zone;
@@ -118,8 +127,8 @@ export class Track {
   }
 
   frameIndexAt(s) {
-    const c = THREE.MathUtils.clamp(s, 0, this.length - 0.01);
-    return (c / this.length) * this.samples;
+    const c = THREE.MathUtils.clamp(s, 0, this.roadLength - 0.01);
+    return (c / this.roadLength) * this.samples;
   }
 
   frameAt(s) {
@@ -417,7 +426,9 @@ export class Track {
         const f = this.frames[i];
         const a = f.pos.clone().addScaledVector(f.left, side * (ROAD_HALF + SHOULDER + 24));
         const b = f.pos.clone().addScaledVector(f.left, side * (ROAD_HALF + SHOULDER + 700));
-        verts.push(a.x, -1.4, a.z, b.x, -2.0, b.z);
+        // The ground plane sits at y = -0.6. Water must float just above it or
+        // the whole coast reads as grass with the ocean buried underneath.
+        verts.push(a.x, -0.45, a.z, b.x, -0.5, b.z);
         const v = (i * SAMPLE_STEP) / 40;
         uvs.push(0, v, 8, v);
         if (i < c1) {
@@ -459,34 +470,43 @@ export class Track {
     // Scenery per zone, denser than before, chunked for culling.
     const placements = new Map(); // kind -> array of {p, angle}
     const baseStep = 34;
-    for (let s = 30; s < this.length - 30; s += baseStep) {
+    // The authored stage keeps the shared (seedable) RNG stream so replays
+    // and the deterministic sim stay bit-identical; the run-off past the
+    // finish draws from a private generator so it cannot shift that stream.
+    let runoffSeed = 0x9e3779b9;
+    const runoffRandom = () => {
+      runoffSeed = (Math.imul(runoffSeed, 1664525) + 1013904223) >>> 0;
+      return runoffSeed / 0x100000000;
+    };
+    for (let s = 30; s < this.roadLength - 30; s += baseStep) {
+      const rnd = s < this.length - 30 ? Math.random : runoffRandom;
       const zone = this.zoneDef(s);
       const props = zone.props || [];
       if (!props.length) continue;
       const count = Math.max(1, Math.round(zone.density || 1));
       for (let k = 0; k < count; k++) {
-        const kind = props[(Math.random() * props.length) | 0];
+        const kind = props[(rnd() * props.length) | 0];
         const isBuilding = kind.startsWith('building');
         const isSign = kind.startsWith('sign_');
-        let side = Math.random() > 0.5 ? 1 : -1;
+        let side = rnd() > 0.5 ? 1 : -1;
         if (zone.ocean === 'right' && side === 1 && !isSign) side = -1; // keep ocean view clear
         let dist;
         if (zone.street && isBuilding) {
-          dist = ROAD_HALF + SHOULDER + 2 + Math.random() * 3;   // tight street canyon
+          dist = ROAD_HALF + SHOULDER + 2 + rnd() * 3;   // tight street canyon
         } else if (isBuilding) {
-          dist = ROAD_HALF + SHOULDER + 8 + Math.random() * 14;
+          dist = ROAD_HALF + SHOULDER + 8 + rnd() * 14;
         } else if (isSign) {
-          dist = ROAD_HALF + SHOULDER + 2 + Math.random() * 3;
+          dist = ROAD_HALF + SHOULDER + 2 + rnd() * 3;
         } else {
-          dist = ROAD_HALF + SHOULDER + 3 + Math.random() * 30;
+          dist = ROAD_HALF + SHOULDER + 3 + rnd() * 30;
         }
-        const f = this.frameAt(s + Math.random() * baseStep * 0.5);
+        const f = this.frameAt(s + rnd() * baseStep * 0.5);
         const p = f.pos.clone().addScaledVector(f.left, side * dist);
         // Text props face back toward approaching drivers (+PI), tilted
         // slightly toward the road.
         const facePlayer = isSign || kind === 'building_surf' ? Math.PI : 0;
         const angle = Math.atan2(f.tan.x, f.tan.z) + facePlayer
-          + (Math.random() - 0.5) * (facePlayer ? 0.2 : 0.5)
+          + (rnd() - 0.5) * (facePlayer ? 0.2 : 0.5)
           + (isSign ? (side > 0 ? -0.35 : 0.35) : 0);
         if (!placements.has(kind)) placements.set(kind, []);
         placements.get(kind).push({ p, angle });
@@ -867,5 +887,8 @@ function mergeGeometries(geos) {
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  // Lit materials need a normal attribute. Without one the shader normalizes
+  // a zero vector (NaN) and every merged prop renders as a black silhouette.
+  out.computeVertexNormals();
   return out;
 }
