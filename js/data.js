@@ -1,7 +1,8 @@
 // Racer and stage definitions for CRUIS'N BEANS.
 // Stages are POINT-TO-POINT roads described as segments:
-//   { len, bend (total heading change in radians, + bends right),
-//     dh (elevation change), zone }
+//   { len, bend (total heading change in radians, + bends LEFT as seen by
+//     the driver; lateral offsets +x are screen-right), dh (elevation change),
+//     zone }
 
 export const RACERS = [
   {
@@ -90,18 +91,33 @@ export const STAGES = [
     id: 'hawaii',
     name: 'HAWAII COAST',
     blurb: 'OCEAN HIGHWAY \u2022 VOLCANO \u2022 BIG AIR',
-    panorama: 'assets/env/hawaii-panorama.webp?v=visual-pass-1',
+    // Sky/ridge strip cut from the postcard painting and mirror-tiled, so
+    // the backdrop scrolls seamlessly through the whole 180-degree route and
+    // never shows a foreground palm folded in half at the wrap.
+    panorama: 'assets/env/hawaii-backdrop.webp?v=world-feel-2',
+    panoramaSpan: 3.9,
+    panoramaAspect: 2400 / 810,
+    panoramaHorizon: 0.45,
     sky: ['#4faaff', '#9fdcff', '#ffe9b8'],
-    ground: '#3fa24d',
-    groundDetail: '#2f8a3e',
+    ground: '#4a9a46',
+    groundDetail: '#367a36',
     shoulder: '#e7d089',
     fogColor: '#cfeaff',
+    fog: [760, 2700],
+    // The whole stage is a coast road: the Pacific is always on the right,
+    // a real drop below the shoulder, so a cold player reads "island" at once.
+    coast: { side: 1, seaLevel: -12.5 },
     // A clean run reaches each checkpoint with single-digit seconds left.
     // Crashes require a shortcut, wheelie leapfrog, beans, or a landed flip.
     startTime: 25,
     checkpointEvery: 1250,
     checkpointBonus: 20,
     targetTime: '2:25',
+    // The road leaves Waikiki, swings right around the landward base of
+    // Diamond Head, then climbs a long left-hand headland (the cliff falls to
+    // the sea on the right) before the lava coast and the run back into town.
+    // The long bends turn left so the ocean stays on the outside and the
+    // coast never crosses another leg of the road.
     segments: [
       { len: 500, bend: 0, dh: 0, zone: 'beachtown' },
       { len: 900, bend: -0.5, dh: 0, zone: 'coast' },
@@ -117,26 +133,31 @@ export const STAGES = [
       { len: 700, bend: 0, dh: -4, zone: 'beachtown' },
     ],
     zones: {
-      beachtown: { props: ['palm', 'hibiscus', 'sign_lei', 'sign_beans', 'building_surf'], density: 1.4 },
-      coast: { props: ['palm', 'palm', 'hibiscus', 'sign_cruise'], density: 1.0, ocean: 'right' },
-      palms: { props: ['palm', 'palm', 'palm', 'rock', 'sign_beans'], density: 1.8 },
-      cliff: { props: ['rock', 'rock', 'palm', 'sign_falling'], density: 1.2 },
-      lava: { props: ['lavarock', 'lavarock', 'palm', 'sign_hot'], density: 1.3 },
+      beachtown: { props: ['palm', 'palm', 'hibiscus', 'tower', 'tower', 'sign_lei', 'sign_beans', 'building_surf'], density: 2.2, shore: 'sand' },
+      coast: { props: ['palm', 'palm', 'hibiscus', 'rock', 'sign_cruise'], density: 1.5, shore: 'sand' },
+      palms: { props: ['palm', 'palm', 'palm', 'palm', 'hibiscus', 'sign_beans'], density: 2.6, shore: 'sand' },
+      cliff: { props: ['rock', 'rock', 'palm', 'palm', 'sign_falling'], density: 1.5, shore: 'rock' },
+      lava: { props: ['lavarock', 'lavarock', 'lavarock', 'palm', 'sign_hot'], density: 1.8, shore: 'lava' },
     },
     landmarks: [
-      { kind: 'alohaGate', at: 0.14, x: 0, w: 52, h: 25 },
+      // The gateway arch is inside the first ten seconds of driving.
+      { kind: 'alohaGate', at: 0.055, x: 0, w: 52, h: 25 },
+      // Diamond Head sits on a headland between the road and the sea, in
+      // view from the start line and wrapped by the first right-hand bend.
+      { kind: 'diamondHead', at: 0.15, x: 560, r: 420, h: 215 },
+      { kind: 'lighthouse', at: 0.205, x: 88, w: 6, h: 22 },
       { kind: 'volcano', at: 0.72, x: -420, w: 900, h: 380 },
       { kind: 'cruiseShip', at: 0.28, x: 200, w: 260, h: 80 },
       { kind: 'cruiseShip', at: 0.06, x: 260, w: 220, h: 70 },
     ],
-    shortcut: { enter: 0.52, exit: 0.70, side: 1, label: 'JUNGLE CUT' },
+    shortcut: { enter: 0.52, exit: 0.70, side: -1, label: 'JUNGLE CUT' },
     ramps: [0.18, 0.46, 0.84],
     beans: [0.1, 0.3, 0.52, 0.7, 0.9],
     animals: [
       { kind: 'seagull', count: 5 },
       { kind: 'pig', count: 4 },
     ],
-    traffic: { oncoming: 9, same: 4 },
+    traffic: { oncoming: 13, same: 7 },
   },
   {
     id: 'desert',

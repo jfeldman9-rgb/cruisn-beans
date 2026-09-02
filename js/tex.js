@@ -45,15 +45,109 @@ export function roadTexture() {
 }
 
 export function groundTexture(base, detail) {
-  const c = canvas(128, 128);
+  const c = canvas(256, 256);
   const g = c.getContext('2d');
   g.fillStyle = base;
-  g.fillRect(0, 0, 128, 128);
+  g.fillRect(0, 0, 256, 256);
   const d = new THREE.Color(detail);
-  const cols = [detail, '#' + d.clone().offsetHSL(0, 0, 0.05).getHexString(),
-    '#' + d.clone().offsetHSL(0, 0, -0.05).getHexString()];
-  noise(g, 128, 128, cols, 900);
+  const hex = (l) => '#' + d.clone().offsetHSL(0, 0, l).getHexString();
+  // Broad blotches first so the surface has mid-frequency variation at speed,
+  // then fine grain. A single-frequency speckle read as a flat demo plane.
+  for (let i = 0; i < 26; i++) {
+    g.fillStyle = hex(i % 2 ? 0.035 : -0.04);
+    g.globalAlpha = 0.5;
+    g.beginPath();
+    g.ellipse(Math.random() * 256, Math.random() * 256, 26 + Math.random() * 42, 12 + Math.random() * 22, Math.random() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+  noise(g, 256, 256, [detail, hex(0.06), hex(-0.06)], 2600);
   return tex(c, 40, 40);
+}
+
+// ---- Hawaii coast surfaces ----
+
+export function sandTexture(kind = 'sand') {
+  const c = canvas(128, 128);
+  const g = c.getContext('2d');
+  const base = kind === 'lava' ? '#2a2a30' : kind === 'rock' ? '#8d7a5c' : '#efdfae';
+  g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+  const cols = kind === 'lava' ? ['#3a3a42', '#1e1e24', '#44444c']
+    : kind === 'rock' ? ['#9a866a', '#7c6a4e', '#a89474'] : ['#f6e9c0', '#e2cf98', '#fff4d0'];
+  noise(g, 128, 128, cols, 1400);
+  return tex(c, 6, 6);
+}
+
+export function cliffTexture(kind = 'rock') {
+  const c = canvas(128, 128);
+  const g = c.getContext('2d');
+  const base = kind === 'lava' ? '#1d1d22' : '#5d4632';
+  g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+  // Basalt strata run along the coast: u (canvas x) is down the face, so the
+  // layers are vertical bands here and horizontal on the cliff.
+  for (let x = 0; x < 128; x += 9 + (x % 3)) {
+    g.fillStyle = kind === 'lava'
+      ? (x % 2 ? '#2b2b31' : '#151518')
+      : (x % 2 ? '#6b533b' : '#4b3826');
+    g.fillRect(x, 0, 4 + (x % 4), 128);
+  }
+  noise(g, 128, 128, kind === 'lava' ? ['#33333a', '#0f0f12'] : ['#7a6146', '#3e2c1c', '#8a7255'], 900);
+  if (kind !== 'lava') {
+    // Green scrub cap at the top of the bluff (u = 0).
+    g.fillStyle = '#3e8a3c'; g.fillRect(0, 0, 20, 128);
+    g.fillStyle = '#2f6e2f';
+    for (let y = 0; y < 128; y += 7) g.fillRect(16 + (y % 3) * 2, y, 6, 4);
+  }
+  return tex(c, 1, 1);
+}
+
+export function foamTexture() {
+  const c = canvas(256, 32);
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 256, 32);
+  g.fillStyle = 'rgba(255,255,255,0.92)';
+  for (let x = 0; x < 256; x += 3) {
+    const h = 5 + Math.abs(Math.sin(x * 0.11) * 7 + Math.sin(x * 0.37) * 4);
+    g.fillRect(x, 16 - h / 2, 3, h);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let i = 0; i < 90; i++) g.fillRect((Math.random() * 256) | 0, (Math.random() * 32) | 0, 3, 2);
+  const t = tex(c);
+  t.magFilter = THREE.LinearFilter;
+  return t;
+}
+
+export function towerTexture(wall = '#f1e9da') {
+  // Waikiki resort tower wall: concrete, balcony rows, teal glass. One tile
+  // is four floors; the box UVs repeat it to the tower's height.
+  const c = canvas(128, 128);
+  const g = c.getContext('2d');
+  g.fillStyle = wall; g.fillRect(0, 0, 128, 128);
+  const shade = new THREE.Color(wall).offsetHSL(0, 0, -0.12).getStyle();
+  for (let y = 4; y < 128; y += 32) {
+    for (let x = 6; x < 124; x += 30) {
+      g.fillStyle = (x + y) % 3 ? '#3d9ab2' : '#2b7a90';
+      g.fillRect(x, y, 20, 16);
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.fillRect(x + 2, y + 2, 6, 12);
+      g.fillStyle = '#ffffff';
+      g.fillRect(x - 2, y + 16, 24, 4);
+    }
+    g.fillStyle = shade;
+    g.fillRect(0, y + 22, 128, 3);
+  }
+  const t = tex(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+export function guardrailTexture() {
+  const c = canvas(32, 64);
+  const g = c.getContext('2d');
+  g.fillStyle = '#f4f4f0'; g.fillRect(0, 0, 32, 64);
+  g.fillStyle = '#d92c2c'; g.fillRect(0, 0, 32, 12);
+  g.fillStyle = '#c9c9c9'; g.fillRect(0, 52, 32, 12);
+  return tex(c);
 }
 
 export function skyTexture(colors) {
@@ -74,38 +168,61 @@ export function skyTexture(colors) {
 // ---- Sprite drawing helpers (billboard scenery) ----
 
 export function palmTexture() {
-  const c = canvas(64, 96);
+  // Coconut palm at 192x288: a leaning ringed trunk and eleven drooping
+  // fronds built from leaflet strokes. Replaces the 64x96 block palm that
+  // read as Lego beside the painted backdrop.
+  const c = canvas(192, 288);
   const g = c.getContext('2d');
-  g.fillStyle = '#8a5a2b';
-  // Curved trunk out of fat rects.
-  for (let i = 0; i < 12; i++) {
-    g.fillRect(28 + Math.sin(i * 0.28) * 6, 96 - (i + 1) * 6, 8, 7);
+  g.clearRect(0, 0, 192, 288);
+  const baseX = 84;
+  const topX = 118;
+  const topY = 74;
+  const trunkAt = (t) => ({
+    x: baseX + (topX - baseX) * t * t,
+    y: 288 - (288 - topY) * t,
+    w: 14 - 6 * t,
+  });
+  for (let i = 0; i <= 40; i++) {
+    const p = trunkAt(i / 40);
+    g.fillStyle = i % 3 === 0 ? '#6a4726' : '#8d6237';
+    g.fillRect(p.x - p.w / 2, p.y - 3, p.w, 6.5);
+    g.fillStyle = 'rgba(255,220,160,0.22)';
+    g.fillRect(p.x - p.w / 2 + 1, p.y - 3, 2.5, 6.5);
   }
-  g.fillStyle = '#6f4620';
-  for (let i = 0; i < 12; i += 3) {
-    g.fillRect(28 + Math.sin(i * 0.28) * 6, 96 - (i + 1) * 6, 8, 2);
-  }
-  // Fronds.
-  g.fillStyle = '#2fae3f';
-  const cx = 34, cy = 22;
-  for (let a = 0; a < 7; a++) {
-    const ang = -Math.PI * 0.9 + a * (Math.PI * 0.8 / 6) - 0.2;
-    for (let r = 2; r < 26; r += 3) {
-      const droop = (r / 26) * (r / 26) * 10;
-      g.fillRect(cx + Math.cos(ang) * r - 3, cy + Math.sin(ang) * r * 0.5 + droop - 3, 7, 5);
+  const frond = (ang, len, dark) => {
+    const cx = topX; const cy = topY;
+    g.strokeStyle = dark ? '#1f7a2c' : '#2f9c3a';
+    g.lineWidth = 3;
+    g.beginPath(); g.moveTo(cx, cy);
+    const ex = cx + Math.cos(ang) * len;
+    const ey = cy + Math.sin(ang) * len + len * 0.55;
+    g.quadraticCurveTo(cx + Math.cos(ang) * len * 0.55, cy + Math.sin(ang) * len * 0.55 - 6, ex, ey);
+    g.stroke();
+    // Leaflets on both sides of the rib.
+    for (let t = 0.12; t < 1; t += 0.07) {
+      const tt = t;
+      const px = cx + Math.cos(ang) * len * tt + (Math.cos(ang) * len * 0.55 - Math.cos(ang) * len) * 0;
+      const py = cy + Math.sin(ang) * len * tt + len * 0.55 * tt * tt;
+      const leaf = (1 - tt) * 22 + 6;
+      const perp = ang + Math.PI / 2;
+      g.strokeStyle = dark ? (t % 0.14 < 0.07 ? '#1b6e27' : '#25872f') : (t % 0.14 < 0.07 ? '#39b347' : '#2c9a39');
+      g.lineWidth = 3.2;
+      g.beginPath();
+      g.moveTo(px, py);
+      g.lineTo(px + Math.cos(perp) * leaf * 0.35, py + Math.sin(perp) * leaf * 0.35 + leaf * 0.7);
+      g.moveTo(px, py);
+      g.lineTo(px - Math.cos(perp) * leaf * 0.35, py - Math.sin(perp) * leaf * 0.35 + leaf * 0.7);
+      g.stroke();
     }
-  }
-  g.fillStyle = '#25902f';
-  for (let a = 0; a < 7; a += 2) {
-    const ang = -Math.PI * 0.9 + a * (Math.PI * 0.8 / 6);
-    for (let r = 8; r < 24; r += 5) {
-      const droop = (r / 26) * (r / 26) * 10;
-      g.fillRect(cx + Math.cos(ang) * r - 2, cy + Math.sin(ang) * r * 0.5 + droop - 1, 4, 3);
-    }
-  }
+  };
+  // Back fronds darker, front fronds lighter for depth.
+  [-2.9, -2.35, -1.2, -0.55].forEach((a) => frond(a, 62, true));
+  [-3.35, -2.65, -2.0, -1.55, -0.95, -0.3, 0.15].forEach((a) => frond(a, 68, false));
   // Coconuts.
-  g.fillStyle = '#5d3d1c';
-  g.fillRect(30, 24, 5, 5); g.fillRect(37, 26, 5, 5);
+  ['#5b3b1a', '#6f4a22', '#4e3116'].forEach((col, i) => {
+    g.fillStyle = col;
+    g.beginPath(); g.arc(topX - 7 + i * 7, topY + 8 + (i % 2) * 4, 5, 0, Math.PI * 2); g.fill();
+  });
   return tex(c);
 }
 
@@ -125,17 +242,25 @@ export function cactusTexture() {
 }
 
 export function rockTexture() {
-  const c = canvas(64, 40);
+  // Rounded basalt boulder with a lit top and mossy foot.
+  const c = canvas(128, 80);
   const g = c.getContext('2d');
-  g.fillStyle = '#9c6b4a';
+  g.clearRect(0, 0, 128, 80);
+  const shade = g.createRadialGradient(50, 26, 6, 64, 44, 60);
+  shade.addColorStop(0, '#8d8375');
+  shade.addColorStop(0.55, '#5f564c');
+  shade.addColorStop(1, '#35302b');
+  g.fillStyle = shade;
   g.beginPath();
-  g.moveTo(2, 40); g.lineTo(10, 14); g.lineTo(24, 4); g.lineTo(44, 10);
-  g.lineTo(60, 24); g.lineTo(62, 40);
+  g.moveTo(6, 78); g.quadraticCurveTo(2, 40, 26, 22); g.quadraticCurveTo(48, 2, 82, 10);
+  g.quadraticCurveTo(118, 18, 124, 50); g.quadraticCurveTo(126, 72, 118, 78);
   g.closePath(); g.fill();
-  g.fillStyle = '#b57f58';
-  g.fillRect(14, 14, 18, 6); g.fillRect(34, 18, 16, 5);
-  g.fillStyle = '#7c5238';
-  g.fillRect(8, 30, 46, 4);
+  g.fillStyle = 'rgba(255,240,210,0.18)';
+  g.beginPath(); g.ellipse(58, 26, 26, 10, -0.3, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(40,90,40,0.55)';
+  g.beginPath(); g.ellipse(64, 74, 58, 8, 0, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(40, 30); g.quadraticCurveTo(60, 44, 66, 70); g.stroke();
   return tex(c);
 }
 
@@ -155,16 +280,29 @@ export function skullTexture() {
 }
 
 export function hibiscusTexture() {
-  const c = canvas(48, 48);
+  // Flowering roadside hedge: leafy clumps with red and pink blooms.
+  const c = canvas(96, 96);
   const g = c.getContext('2d');
-  g.fillStyle = '#1f7c2e';
-  g.fillRect(8, 20, 32, 28);
-  g.fillStyle = '#2fae3f';
-  g.fillRect(4, 24, 40, 16);
-  g.fillStyle = '#ff4f8b';
-  g.fillRect(14, 8, 10, 10); g.fillRect(28, 14, 9, 9); g.fillRect(20, 26, 9, 9);
-  g.fillStyle = '#ffd23d';
-  g.fillRect(17, 11, 3, 3); g.fillRect(31, 17, 3, 3); g.fillRect(23, 29, 3, 3);
+  g.clearRect(0, 0, 96, 96);
+  const leaf = ['#1f7c2e', '#2b9a3a', '#33ad45', '#186a26'];
+  for (let i = 0; i < 26; i++) {
+    g.fillStyle = leaf[i % leaf.length];
+    const x = 14 + Math.random() * 68;
+    const y = 30 + Math.random() * 58;
+    g.beginPath(); g.ellipse(x, y, 12 + Math.random() * 8, 9 + Math.random() * 6, Math.random(), 0, Math.PI * 2); g.fill();
+  }
+  const petals = ['#ff3b6f', '#ff5aa2', '#ff7a3d', '#ffd23d'];
+  for (let i = 0; i < 9; i++) {
+    const x = 16 + Math.random() * 64;
+    const y = 28 + Math.random() * 50;
+    g.fillStyle = petals[i % petals.length];
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2;
+      g.beginPath(); g.ellipse(x + Math.cos(a) * 4, y + Math.sin(a) * 4, 4, 2.6, a, 0, Math.PI * 2); g.fill();
+    }
+    g.fillStyle = '#ffe28a';
+    g.beginPath(); g.arc(x, y, 1.8, 0, Math.PI * 2); g.fill();
+  }
   return tex(c);
 }
 
@@ -1255,15 +1393,84 @@ export function surfShopTexture() {
 }
 
 export function oceanPlaneTexture() {
+  // Neutral-white water so vertex colors can grade turquoise shallows into
+  // deep Pacific blue; only wave caps and swell shading live in the texture.
+  const c = canvas(256, 256);
+  const g = c.getContext('2d');
+  g.fillStyle = '#e8f4fb';
+  g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 6) {
+    g.fillStyle = `rgba(150,190,220,${0.18 + 0.14 * Math.sin(y * 0.19)})`;
+    g.fillRect(0, y + Math.sin(y * 0.4) * 2, 256, 3);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  for (let i = 0; i < 70; i++) {
+    const w = 6 + (Math.random() * 16) | 0;
+    g.fillRect((Math.random() * 256) | 0, (Math.random() * 256) | 0, w, 2);
+  }
+  return tex(c, 20, 20);
+}
+
+// ---- 3D traffic detail faces ----
+
+export function truckFaceTexture(color = '#2a4fd6') {
   const c = canvas(128, 128);
   const g = c.getContext('2d');
-  g.fillStyle = '#1673c9';
-  g.fillRect(0, 0, 128, 128);
-  g.fillStyle = '#3a97e8';
-  for (let i = 0; i < 120; i++) g.fillRect((Math.random() * 128) | 0, (Math.random() * 128) | 0, 8, 2);
-  g.fillStyle = '#8ed4ff';
-  for (let i = 0; i < 40; i++) g.fillRect((Math.random() * 128) | 0, (Math.random() * 128) | 0, 5, 1);
-  return tex(c, 20, 20);
+  g.fillStyle = color; g.fillRect(0, 0, 128, 128);
+  // Windshield.
+  g.fillStyle = '#7fc6ee'; g.fillRect(12, 8, 104, 34);
+  g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(18, 12, 26, 26);
+  // Chrome grille and bumper.
+  g.fillStyle = '#d8dde6'; g.fillRect(30, 54, 68, 44);
+  g.fillStyle = '#1b1b22';
+  for (let y = 58; y < 96; y += 6) g.fillRect(34, y, 60, 3);
+  g.fillStyle = '#e6e9ef'; g.fillRect(4, 104, 120, 16);
+  // Headlights and marker lamps.
+  g.fillStyle = '#fff5b8'; g.fillRect(8, 70, 18, 14); g.fillRect(102, 70, 18, 14);
+  g.fillStyle = '#ffa826';
+  for (let x = 14; x < 120; x += 20) g.fillRect(x, 2, 6, 4);
+  return tex(c);
+}
+
+export function trailerSideTexture() {
+  const c = canvas(256, 96);
+  const g = c.getContext('2d');
+  g.fillStyle = '#e9e9ee'; g.fillRect(0, 0, 256, 96);
+  g.fillStyle = '#c8c8d2';
+  for (let x = 0; x < 256; x += 16) g.fillRect(x, 0, 2, 96);
+  g.fillStyle = '#1f9e46'; g.fillRect(40, 18, 176, 56);
+  g.fillStyle = '#ffd23d';
+  g.font = 'bold 30px "Arial Black", sans-serif';
+  g.textAlign = 'center';
+  g.fillText('BIG SAL BEANS', 128, 48);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 14px "Arial Black", sans-serif';
+  g.fillText('WE DELIVER GAS', 128, 68);
+  return tex(c);
+}
+
+export function busSideTexture() {
+  const c = canvas(256, 96);
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffb635'; g.fillRect(0, 0, 256, 96);
+  g.fillStyle = '#7fc6ee';
+  for (let x = 8; x < 256; x += 30) g.fillRect(x, 14, 24, 30);
+  g.fillStyle = '#c8262d'; g.fillRect(0, 52, 256, 10);
+  g.fillStyle = '#ffffff';
+  g.font = 'bold 16px "Arial Black", sans-serif';
+  g.textAlign = 'center';
+  g.fillText('ALOHA TOURS', 128, 82);
+  return tex(c);
+}
+
+export function carSideTexture(color) {
+  const c = canvas(128, 64);
+  const g = c.getContext('2d');
+  g.fillStyle = color; g.fillRect(0, 0, 128, 64);
+  g.fillStyle = '#7fc6ee'; g.fillRect(28, 6, 34, 22); g.fillRect(68, 6, 34, 22);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 44, 128, 20);
+  g.fillStyle = '#d8dde6'; g.fillRect(0, 38, 128, 3);
+  return tex(c);
 }
 
 export function shimmerTexture() {

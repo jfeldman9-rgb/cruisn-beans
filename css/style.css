@@ -31,6 +31,21 @@ html, body {
 
 #steer-surface { position: fixed; inset: 0; z-index: 4; }
 
+/* Speed rush: the frame edges darken and streak as the needle climbs. This is
+   a camera effect (opacity driven by speed), not another HUD element. */
+#speed-rush {
+  position: fixed; inset: 0; z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 50% 55%, transparent 46%, rgba(6, 10, 30, 0.55) 100%),
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(255, 255, 255, 0.045) 28px 30px);
+  mask-image: radial-gradient(ellipse at 50% 55%, transparent 38%, #000 100%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 55%, transparent 38%, #000 100%);
+  transition: opacity 0.12s linear;
+}
+body.no-webgl #speed-rush { display: none; }
+
 /* ---------- screens ---------- */
 .screen {
   position: fixed; inset: 0; z-index: 10;

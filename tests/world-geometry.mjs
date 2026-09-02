@@ -77,21 +77,43 @@ for (const def of STAGES) {
   checks++;
 }
 
-// Ocean above ground on the coast.
+// The Hawaii sea is a real drop below the road, not a texture beside it.
 {
-  const hawaii = new Track(STAGES.find((s) => s.id === 'hawaii'));
-  const oceanMeshes = [];
+  const def = STAGES.find((s) => s.id === 'hawaii');
+  const hawaii = new Track(def);
+  const byKind = new Map();
   hawaii.group.traverse((obj) => {
-    if (obj.isMesh && obj.material && obj.material.map && obj.material.roughness === 0.28) oceanMeshes.push(obj);
+    const kind = obj.userData && obj.userData.kind;
+    if (kind && obj.isMesh) byKind.set(kind, [...(byKind.get(kind) || []), obj]);
   });
-  assert.ok(oceanMeshes.length > 0, 'Hawaii should build ocean ribbons');
-  const groundY = -0.6;
-  oceanMeshes.forEach((m) => {
+  for (const kind of ['ocean', 'shelf', 'beach', 'cliff', 'foam']) {
+    assert.ok((byKind.get(kind) || []).length > 0, `Hawaii should build ${kind} strips`);
+  }
+  const sea = def.coast.seaLevel;
+  ['ocean', 'shelf'].forEach((kind) => byKind.get(kind).forEach((m) => {
     const pos = m.geometry.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
-      assert.ok(pos.getY(i) > groundY, `ocean vertex at y=${pos.getY(i)} is under the ground plane`);
+      assert.ok(Math.abs(pos.getY(i) - sea) < 0.2, `${kind} vertex at y=${pos.getY(i)} is not at sea level ${sea}`);
     }
+  }));
+  // Every point of the road sits well above the water.
+  for (let s = 0; s < hawaii.roadLength; s += 50) {
+    assert.ok(hawaii.frameAt(s).pos.y - sea >= 8, `road at s=${s} is not high above the sea`);
+  }
+  // No ground plane: the island stage builds land as a ribbon so the sea can
+  // sit lower than the grass without being buried by it.
+  let bigPlane = false;
+  hawaii.group.traverse((obj) => {
+    if (obj.isMesh && obj.geometry.type === 'PlaneGeometry' && obj.geometry.parameters.width > 5000) bigPlane = true;
   });
+  assert.equal(bigPlane, false, 'coast stage must not use a world ground plane');
+  // Other stages keep their plane.
+  const desert = new Track(STAGES.find((s) => s.id === 'desert'));
+  let desertPlane = false;
+  desert.group.traverse((obj) => {
+    if (obj.isMesh && obj.geometry.type === 'PlaneGeometry' && obj.geometry.parameters.width > 5000) desertPlane = true;
+  });
+  assert.equal(desertPlane, true);
   checks++;
 }
 
@@ -116,8 +138,12 @@ for (const def of STAGES) {
   race.updatePanoramaCrop();
   const straight = race.panoramaTexture.offset.x;
   const repeatX = race.panoramaTexture.repeat.x;
-  assert.ok(repeatX > 0.5 && repeatX < 0.8, `visible slice ${repeatX} should zoom the 16:9 art`);
-  assert.ok(Math.abs(race.panoramaTexture.repeat.y - repeatX) < 1e-6, 'crop keeps the view aspect at 16:9');
+  const artAspect = STAGES[0].panoramaAspect || 16 / 9;
+  assert.ok(repeatX > 0.35 && repeatX < 0.8, `visible slice ${repeatX} should zoom into the art`);
+  assert.ok(Math.abs(race.panoramaTexture.repeat.y / repeatX - artAspect / (16 / 9)) < 1e-6, 'crop keeps the view aspect');
+  const horizon = STAGES[0].panoramaHorizon ?? 0.5;
+  const vCenter = race.panoramaTexture.offset.y + race.panoramaTexture.repeat.y / 2;
+  assert.ok(Math.abs(vCenter - horizon) < 0.12, `painting horizon ${horizon} should sit near the view center (${vCenter})`);
   race.camera.lookAt(100, 10, 0); // yaw +90 degrees toward +x (screen-left)
   race.updatePanoramaCrop();
   const turned = race.panoramaTexture.offset.x;
