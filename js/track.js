@@ -2,7 +2,7 @@
 // descriptions, with zoned scenery, landmarks visible from far away,
 // checkpoint arches, ramps, bean cans, and one real shortcut spline.
 import * as THREE from '../vendor/three.module.js';
-import * as tex from './tex.js?v=finish-fight-1';
+import * as tex from './tex.js?v=next-level-1';
 
 export const ROAD_W = 24;          // full two-way road width
 export const ROAD_HALF = ROAD_W / 2;
@@ -417,7 +417,9 @@ export class Track {
         const f = this.frames[i];
         const a = f.pos.clone().addScaledVector(f.left, side * (ROAD_HALF + SHOULDER + 24));
         const b = f.pos.clone().addScaledVector(f.left, side * (ROAD_HALF + SHOULDER + 700));
-        verts.push(a.x, -1.4, a.z, b.x, -2.0, b.z);
+        // The ground plane sits at y = -0.6. Water must float just above it or
+        // the whole coast reads as grass with the ocean buried underneath.
+        verts.push(a.x, -0.45, a.z, b.x, -0.5, b.z);
         const v = (i * SAMPLE_STEP) / 40;
         uvs.push(0, v, 8, v);
         if (i < c1) {
@@ -867,5 +869,8 @@ function mergeGeometries(geos) {
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  // Lit materials need a normal attribute. Without one the shader normalizes
+  // a zero vector (NaN) and every merged prop renders as a black silhouette.
+  out.computeVertexNormals();
   return out;
 }

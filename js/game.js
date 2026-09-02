@@ -2,9 +2,9 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=finish-fight-1';
-import * as tex from './tex.js?v=finish-fight-1';
-import { audio } from './audio.js?v=finish-fight-1';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=next-level-1';
+import * as tex from './tex.js?v=next-level-1';
+import { audio } from './audio.js?v=next-level-1';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
