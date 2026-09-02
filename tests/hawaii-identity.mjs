@@ -201,6 +201,33 @@ function settleCamera(race) {
     r2.trafficInteract(q, dt, true);
   }
   assert.equal(q.spinT, 0, 'landing past the sedan must not pile');
+
+  // Leapfrogging the wrong-way semi: the chase camera must ride over the
+  // trailer roof rather than clip through it and blank the screen.
+  const { race: r3 } = makeRace();
+  const w = r3.player;
+  const truck = r3.traffic.find((v) => v.kind === 'semi');
+  r3.traffic = [truck];
+  w.s = 1500; w.x = 6; w.speed = 62; w.grounded = true; w.wheelieT = 1.2; w.wheelieFullT = 1.9; w.yOff = 0;
+  truck.s = w.s + 20; truck.x = 6; truck.clearedBy = 0; truck.speed = 20; truck.oncoming = true; truck.wrongWay = true;
+  r3.cameraMode = 0; r3.camInit = false;
+  r3.updateCamera(dt);
+  r3.trafficInteract(w, dt, true);
+  assert.equal(w.airSource, 'leapfrog', 'wheelie into the semi must leapfrog');
+  let worstClearance = Infinity;
+  for (let i = 0; i < 400 && !w.grounded; i++) {
+    r3.airPhysics(w, dt);
+    w.s += w.speed * dt;
+    truck.s -= truck.speed * dt;
+    r3.updateCamera(dt);
+    const camS = w.s - Race.CAMERA_RIGS[0].back;
+    if (Math.abs(camS - truck.s) < truck.halfLen + 1) {
+      const roadY = r3.track.frameAt(camS).pos.y;
+      worstClearance = Math.min(worstClearance, r3.camera.position.y - roadY - truck.h);
+    }
+  }
+  assert.ok(worstClearance !== Infinity, 'the camera should pass over the trailer during the hop');
+  assert.ok(worstClearance > 1, `camera must clear the semi roof while leapfrogging (worst ${worstClearance.toFixed(2)})`);
   checks++;
 }
 

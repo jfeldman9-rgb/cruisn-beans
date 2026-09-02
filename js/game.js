@@ -1357,6 +1357,12 @@ export class Race {
       lookPos = car.worldPos(new THREE.Vector3());
       lookPos.y += 1.2;
     }
+    // Leapfrog hop: the chase camera rides up with the car so it clears the
+    // roof of the semi it is jumping instead of clipping through the trailer.
+    const hopping = !car.grounded && car.airSource === 'leapfrog' && !this.demo;
+    const hopTarget = hopping ? 3 + car.yOff * 0.65 : 0;
+    this.hopLift = (this.hopLift || 0) + (hopTarget - (this.hopLift || 0)) * Math.min(1, (hopTarget > (this.hopLift || 0) ? 14 : 6) * dt);
+    camLift += this.hopLift;
     const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
