@@ -61,7 +61,12 @@
   <div id="hud-progress"><div id="hud-progress-fill"></div></div>
   <div id="hud-location">DESERT HIGHWAY <small>FLATS</small></div>
   <div id="hud-beans-box"><span class="bean-ico"></span><span id="hud-beans">&times;0</span></div>
-  <div id="hud-mph">0 MPH</div>
+  <div id="speedo">
+    <div class="speedo-arc"></div>
+    <div class="speedo-ticks"></div>
+    <div id="speedo-needle"></div>
+    <div id="hud-mph">0 MPH</div>
+  </div>
   <div id="danger-alert">WRONG WAY TRUCK!<small>DOUBLE-TAP GAS — WHEELIE IT!</small></div>
   <div id="checkpoint-flash"><small id="checkpoint-count">CHECKPOINT 1/6</small><strong>TIME EXTENDED</strong><span id="checkpoint-bonus">+20 SECONDS</span></div>
   <div id="countdown"></div>
@@ -110,6 +115,7 @@
   </svg>
 </button>
 
+<div id="confetti"></div>
 <div id="build-badge">NEXT LEVEL 1</div>
 <div id="webgl-warning">3D ROAD UNAVAILABLE IN THIS BROWSER &bull; ENABLE WEBGL TO DRIVE</div>
 

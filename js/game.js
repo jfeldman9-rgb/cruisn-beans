@@ -483,6 +483,7 @@ export class Race {
         audio.startFart();       // the joke exhaust
         setTimeout(() => audio.stopFart(), 700);
         this.onEvent('toast', 'WHEELIE!');
+        this.onEvent('haptic', 'wheelie');
       }
     }
     if (events.twoWheel !== 0) {
@@ -889,6 +890,7 @@ export class Race {
         audio.bigAir();
         audio.announce('Leapfrog!');
         this.onEvent('toast', 'LEAPFROG! +1s');
+        this.onEvent('haptic', 'leapfrog');
         return;
       }
 
@@ -898,7 +900,10 @@ export class Race {
         if (car.invuln > 0) return;
         v.clearedBy = car;
         if (isPlayer) {
-          if (car.speed > 44) {
+          // No back-to-back piles: while the comeback boost is active a
+          // second contact only scrubs speed, so "sit in a pile, then catch
+          // the pack" never degrades into a chain of spinouts.
+          if (car.speed > 44 && car.recoveryT <= 0) {
             // Full crash pile.
             car.spinT = 2.05;
             car.crashHold = 1.08;
@@ -916,11 +921,13 @@ export class Race {
             audio.announce('Pileup! The pack is coming!');
             this.shake = 1;
             this.onEvent('toast', 'CRASH PILE! PACK GOING BY...');
+            this.onEvent('haptic', 'crash');
           } else {
             car.speed *= 0.4;
             audio.crash();
             this.shake = Math.min(1, this.shake + 0.5);
             this.onEvent('toast', 'TRAFFIC!');
+            this.onEvent('haptic', 'bump');
           }
           car.invuln = 0.8;
         } else {
@@ -991,6 +998,7 @@ export class Race {
           audio.animal(a.def.cry);
           const cries = { moo: 'MOO!!', heehaw: 'HEE-HAW!!', squeal: 'WEE WEE WEE!!', thud: 'BONK!', cluck: 'BAGAWK!!', squawk: 'SQUAWK!!' };
           this.onEvent('toast', cries[a.def.cry] || 'OOF!');
+          this.onEvent('haptic', 'bump');
         }
       }
     });
@@ -1050,6 +1058,7 @@ export class Race {
             : 'SIDE FLIP! CLOCK +3s • RECORD -3s');
           audio.bigAir();
           audio.announce('Record time cut!');
+          this.onEvent('haptic', 'stunt');
           this.shake = Math.min(1, this.shake + 0.3);
         } else if (car.isPlayer) {
           car.speed *= 0.5;
@@ -1101,6 +1110,7 @@ export class Race {
       this.nextCheckpoint++;
       this.timeLeft += this.opts.trackDef.checkpointBonus;
       audio.checkpoint();
+      this.onEvent('haptic', 'checkpoint');
       this.onEvent('checkpoint', {
         bonus: this.opts.trackDef.checkpointBonus,
         index: this.nextCheckpoint,
@@ -1130,7 +1140,9 @@ export class Race {
       car.finishTime = car.isPlayer
         ? Math.max(0, car.rawFinishTime - this.stuntCredit)
         : car.rawFinishTime;
-      car.speed = 0;
+      // AI park at the line; the player coasts through the arch under the
+      // finish camera and decelerates naturally in updatePlayer.
+      if (!car.isPlayer) car.speed = 0;
       this.finishOrder.push(car);
     });
     if (this.player.finished) this.endRace(false);
@@ -1149,8 +1161,15 @@ export class Race {
   endRace(timeUp) {
     if (this.state === 'over') return;
     this.state = 'over';
+    this.finishT = 0;
     audio.stopFart();
     const place = this.positionOf(this.player);
+    if (!timeUp) {
+      this.onEvent('toast', place === 1 ? 'FINISH! YOU WIN!' : 'FINISH!');
+      this.onEvent('haptic', place === 1 ? 'win' : 'finish');
+    } else {
+      this.onEvent('haptic', 'timeup');
+    }
     const results = this.cars.map((c) => ({
       racer: c.racer,
       isPlayer: c.isPlayer,
@@ -1293,7 +1312,20 @@ export class Race {
       if (backS < 0) anchorPos.addScaledVector(this.track.frameAt(0).tan, backS);
       lookPos = this.track.worldPos(car.s + aheadDist, laneX);
     }
-    const camLift = this.demo ? 6.4 : mode === 0 ? 12.25 : mode === 1 ? 4.7 : 1.65;
+    let camLift = this.demo ? 6.4 : mode === 0 ? 12.25 : mode === 1 ? 4.7 : 1.65;
+    // Finish crane: once the player crosses the line the camera rises, pulls
+    // back, and drifts to the outside while the car coasts through the arch.
+    let crane = 0;
+    if (this.state === 'over' && car.finished && !this.demo) {
+      this.finishT = (this.finishT || 0) + dt;
+      const t = Math.min(1, this.finishT / 2.2);
+      crane = t * t * (3 - 2 * t);
+      camLift += 16 * crane;
+      const f = this.track.frameAt(car.s);
+      anchorPos.addScaledVector(f.left, -9 * crane).addScaledVector(f.tan, -14 * crane);
+      lookPos = car.worldPos(new THREE.Vector3());
+      lookPos.y += 1.2;
+    }
     const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
@@ -1307,11 +1339,11 @@ export class Race {
     }
     // Aim closer to the horizon in high chase. This retains the requested
     // elevated/wide traffic view without pitching 30 degrees into the road.
-    lookPos.y += (mode === 0 ? 5.6 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
+    if (!crane) lookPos.y += (mode === 0 ? 5.6 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
     this.camera.lookAt(lookPos);
     const speed01 = Math.min(1, car.speed / 66);
     const baseFov = this.demo ? 62 : mode === 0 ? 64 : mode === 1 ? 68 : 72;
-    const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0);
+    const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0) - crane * 10;
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, 5 * dt);
     this.camera.updateProjectionMatrix();
     this.updatePanoramaCrop();

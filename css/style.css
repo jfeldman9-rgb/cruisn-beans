@@ -327,14 +327,72 @@ html, body {
 #hud-time.low { color: var(--red); animation: blink 0.5s steps(2) infinite; }
 .hud-box.pos span { color: var(--yellow); }
 
+/* Analog cabinet speedo: a conic arc with a needle, MPH readout inside. */
+#speedo {
+  position: absolute; bottom: max(1.2vh, env(safe-area-inset-bottom)); left: 50%;
+  transform: translateX(-50%);
+  width: clamp(150px, 30vh, 230px);
+  height: clamp(78px, 15.6vh, 120px);
+  pointer-events: none;
+}
+.speedo-arc {
+  position: absolute; inset: 0;
+  border-radius: 999px 999px 0 0;
+  background: conic-gradient(from 270deg at 50% 100%,
+    var(--green) 0deg, #a4e32e 62deg, var(--yellow) 105deg, #ff8a2b 140deg, var(--red) 172deg, transparent 180deg);
+  -webkit-mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6));
+}
+.speedo-ticks {
+  position: absolute; inset: 0;
+  border-radius: 999px 999px 0 0;
+  background: repeating-conic-gradient(from 270deg at 50% 100%, rgba(0,0,0,0.55) 0deg 1.5deg, transparent 1.5deg 18deg);
+  -webkit-mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+  mask: radial-gradient(circle at 50% 100%, transparent 63%, #000 64.5%, #000 99%, transparent 100%);
+}
+#speedo-needle {
+  position: absolute; left: 50%; bottom: 0;
+  width: 4px; height: 86%;
+  margin-left: -2px;
+  background: linear-gradient(180deg, #fff, var(--red) 70%, #7a0b10);
+  border-radius: 3px 3px 0 0;
+  transform-origin: 50% 100%;
+  transform: rotate(-90deg);
+  box-shadow: 0 0 6px rgba(255,255,255,0.7);
+  transition: transform 0.08s linear;
+}
+#speedo-needle::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -7px;
+  width: 16px; height: 16px; margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #b8b8c8 55%, #3b3b48);
+  border: 2px solid #111;
+}
+#speedo.wheelie .speedo-arc { filter: drop-shadow(0 0 12px rgba(160, 255, 120, 0.9)) brightness(1.25); }
 #hud-mph {
-  position: absolute; bottom: max(2vh, env(safe-area-inset-bottom)); left: 50%;
+  position: absolute; bottom: 16%; left: 50%;
   transform: translateX(-50%) skewX(-8deg);
-  color: #fff; font-size: clamp(16px, 4vh, 30px);
+  color: #fff; font-size: clamp(15px, 3.6vh, 28px);
   text-shadow: 0 2px 0 #000, 0 0 12px rgba(255, 210, 61, 0.5);
   pointer-events: none;
-  padding: 0.18em 0.65em;
-  background: linear-gradient(90deg, transparent, rgba(4,5,18,0.56), transparent);
+  padding: 0.1em 0.55em;
+  white-space: nowrap;
+  background: linear-gradient(90deg, transparent, rgba(4,5,18,0.7), transparent);
+}
+
+/* Confetti for a win / championship. */
+#confetti { position: fixed; inset: 0; z-index: 28; pointer-events: none; overflow: hidden; }
+#confetti i {
+  position: absolute; top: -4vh;
+  width: 10px; height: 16px;
+  border-radius: 2px;
+  animation: confetti-fall 2.8s cubic-bezier(0.2, 0.6, 0.6, 1) forwards;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(112vh) rotate(720deg); opacity: 0.9; }
 }
 
 #countdown {

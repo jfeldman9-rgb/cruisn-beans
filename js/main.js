@@ -351,6 +351,42 @@ function startRace() {
   setTimeout(() => race && race.startCountdown(), 800);
 }
 
+// Phone haptics for the beats a cabinet would sell with a force-feedback
+// wheel. No-op where vibrate() is unavailable (iOS Safari, desktop).
+const HAPTICS = {
+  wheelie: 18,
+  leapfrog: [20, 30, 45],
+  checkpoint: [30, 40, 30],
+  stunt: [15, 25, 15, 25, 40],
+  bump: 45,
+  crash: [90, 50, 120],
+  go: 60,
+  finish: [40, 40, 40, 40, 140],
+  win: [40, 40, 40, 40, 60, 40, 220],
+  timeup: [200, 80, 200],
+};
+function buzz(kind) {
+  const pattern = HAPTICS[kind];
+  if (!pattern || typeof navigator.vibrate !== 'function' || audio.muted) return;
+  try { navigator.vibrate(pattern); } catch (error) { /* unsupported */ }
+}
+
+const confettiEl = $('#confetti');
+function confetti(count = 48) {
+  const colors = ['#ffd23d', '#e8262d', '#2fae3f', '#ff5aa2', '#4f8fe0', '#fff'];
+  confettiEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('i');
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = `${Math.random() * 1.2}s`;
+    piece.style.animationDuration = `${2.2 + Math.random() * 1.4}s`;
+    piece.style.transform = `rotate(${Math.random() * 360}deg)`;
+    confettiEl.appendChild(piece);
+  }
+  setTimeout(() => { confettiEl.innerHTML = ''; }, 4200);
+}
+
 function onRaceEvent(kind, data) {
   if (kind === 'count') {
     showCount(String(data));
@@ -361,15 +397,19 @@ function onRaceEvent(kind, data) {
     audio.countdownBeep(true);
     audio.startMusic('race');
     audio.announce('Go, go, go!');
+    buzz('go');
     $('#hint').classList.remove('show');
   } else if (kind === 'checkpoint') {
     showCheckpoint(data);
   } else if (kind === 'toast') {
     toast(data);
+  } else if (kind === 'haptic') {
+    buzz(data);
   } else if (kind === 'rivalPass') {
     showRivalPass(data);
   } else if (kind === 'finish') {
-    setTimeout(() => showResults(data), 900);
+    // Let the finish crane play before the standings on a real finish.
+    setTimeout(() => showResults(data), data.timeUp ? 900 : 2300);
   }
 }
 
@@ -530,6 +570,9 @@ async function showResults(data) {
     ? (data.timeUp || finalLeg ? 'NEW TOUR' : 'NEXT STAGE \u25B6')
     : 'RETRY';
   show('results');
+  if (!data.timeUp && (data.place === 1 || (tour && finalLeg && standing && standing.place === 1))) {
+    confetti(tour && finalLeg ? 90 : 48);
+  }
 
   // Record boards: single stages keep a top-3 per stage, the tour keeps one champion.
   let newRank = 0;
@@ -653,6 +696,9 @@ const hudTime = $('#hud-time');
 const hudCp = $('#hud-cp');
 const hudPos = $('#hud-pos');
 const hudMph = $('#hud-mph');
+const speedo = $('#speedo');
+const speedoNeedle = $('#speedo-needle');
+const SPEEDO_MAX_MPH = 170;
 const hudBeans = $('#hud-beans');
 const hudProgress = $('#hud-progress-fill');
 const hudLocation = $('#hud-location');
@@ -666,6 +712,8 @@ function paintHUD() {
   hudCp.textContent = `CP ${h.cp}/${h.cps}`;
   hudPos.textContent = `${PLACE_NAMES[h.place - 1]}/${h.total}`;
   hudMph.textContent = `${h.mph} MPH`;
+  speedoNeedle.style.transform = `rotate(${-90 + 180 * Math.min(1, h.mph / SPEEDO_MAX_MPH)}deg)`;
+  speedo.classList.toggle('wheelie', h.wheelie);
   hudBeans.textContent = `\u00d7${h.beans}`;
   hudProgress.style.width = `${(h.progress * 100).toFixed(1)}%`;
   $('#btn-gas').classList.toggle('active', h.wheelie);
