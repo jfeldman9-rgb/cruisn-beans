@@ -246,10 +246,13 @@ export function rockTexture() {
   const c = canvas(128, 80);
   const g = c.getContext('2d');
   g.clearRect(0, 0, 128, 80);
+  // Kept light: the Lambert prop material and crossed planes each take a
+  // bite out of the brightness, and a dark gradient here rendered as a
+  // black sphere on the grass.
   const shade = g.createRadialGradient(50, 26, 6, 64, 44, 60);
-  shade.addColorStop(0, '#8d8375');
-  shade.addColorStop(0.55, '#5f564c');
-  shade.addColorStop(1, '#35302b');
+  shade.addColorStop(0, '#d8cfbe');
+  shade.addColorStop(0.55, '#a1978a');
+  shade.addColorStop(1, '#6a615a');
   g.fillStyle = shade;
   g.beginPath();
   g.moveTo(6, 78); g.quadraticCurveTo(2, 40, 26, 22); g.quadraticCurveTo(48, 2, 82, 10);
@@ -259,7 +262,7 @@ export function rockTexture() {
   g.beginPath(); g.ellipse(58, 26, 26, 10, -0.3, 0, Math.PI * 2); g.fill();
   g.fillStyle = 'rgba(40,90,40,0.55)';
   g.beginPath(); g.ellipse(64, 74, 58, 8, 0, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2;
+  g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 2;
   g.beginPath(); g.moveTo(40, 30); g.quadraticCurveTo(60, 44, 66, 70); g.stroke();
   return tex(c);
 }
@@ -1363,12 +1366,12 @@ export function cantinaNeonTexture() {
 export function lavarockTexture() {
   const c = canvas(56, 36);
   const g = c.getContext('2d');
-  g.fillStyle = '#2c2c34';
+  g.fillStyle = '#4e4e5a';
   g.beginPath();
   g.moveTo(2, 36); g.lineTo(10, 12); g.lineTo(26, 4); g.lineTo(42, 12); g.lineTo(54, 36);
   g.closePath(); g.fill();
   g.fillStyle = '#ff6a2c'; g.fillRect(16, 18, 8, 3); g.fillRect(32, 24, 10, 3);
-  g.fillStyle = '#4a4a54'; g.fillRect(12, 12, 12, 4); g.fillRect(30, 8, 10, 4);
+  g.fillStyle = '#7b7b88'; g.fillRect(12, 12, 12, 4); g.fillRect(30, 8, 10, 4);
   return tex(c);
 }
 

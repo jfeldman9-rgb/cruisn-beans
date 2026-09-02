@@ -94,10 +94,14 @@ export const STAGES = [
     // Sky/ridge strip cut from the postcard painting and mirror-tiled, so
     // the backdrop scrolls seamlessly through the whole 180-degree route and
     // never shows a foreground palm folded in half at the wrap.
-    panorama: 'assets/env/hawaii-backdrop.webp?v=world-feel-2',
-    panoramaSpan: 3.9,
-    panoramaAspect: 2400 / 810,
-    panoramaHorizon: 0.45,
+    // One volcano/ridge/ship section of the painting flanked by blurred
+    // sea/sky bands, so the mirrored wrap never twins the volcano. The
+    // horizon is pinned a little below eye level: the sea plane hides the
+    // painted foothills and the plume clears the top of a phone screen.
+    panorama: 'assets/env/hawaii-backdrop.webp?v=world-feel-3',
+    panoramaSpan: 3.7,
+    panoramaAspect: 1800 / 900,
+    panoramaHorizon: 0.6,
     sky: ['#4faaff', '#9fdcff', '#ffe9b8'],
     ground: '#4a9a46',
     groundDetail: '#367a36',
@@ -146,7 +150,10 @@ export const STAGES = [
       // view from the start line and wrapped by the first right-hand bend.
       { kind: 'diamondHead', at: 0.15, x: 560, r: 420, h: 215 },
       { kind: 'lighthouse', at: 0.205, x: 88, w: 6, h: 22 },
-      { kind: 'volcano', at: 0.72, x: -420, w: 900, h: 380 },
+      // A real cone far inland (see Track.buildCrater): the back half of the
+      // stage faces away from the painted volcano, so this one keeps a
+      // mountain on the horizon over the cliff and lava zones.
+      { kind: 'volcano', at: 0.95, x: -1900, r: 1000, h: 520 },
       { kind: 'cruiseShip', at: 0.28, x: 200, w: 260, h: 80 },
       { kind: 'cruiseShip', at: 0.06, x: 260, w: 220, h: 70 },
     ],

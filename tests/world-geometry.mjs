@@ -120,20 +120,30 @@ for (const def of STAGES) {
 // Desert buttes and Tequila blocks are geometry, not cards, and stay off the road.
 {
   const ROAD_CLEAR = 16;
+  // Every cone landmark on every stage (buttes, Diamond Head, the inland
+  // volcano) must leave the whole road, run-off included, outside its skirt.
+  const coneKinds = new Set(['butte', 'diamondHead', 'volcano']);
+  for (const def of STAGES) {
+    const track = new Track(def);
+    track.group.traverse((obj) => {
+      if (!obj.isMesh || !coneKinds.has(obj.userData.kind)) return;
+      const { center, radius } = obj.userData;
+      for (let s = 0; s < track.roadLength; s += 25) {
+        const f = track.frameAt(s);
+        const d = Math.hypot(f.pos.x - center.x, f.pos.z - center.z);
+        assert.ok(d > radius + ROAD_CLEAR, `${def.id}: ${obj.userData.kind} at s=${s} swallows the road (d=${d.toFixed(0)}, r=${radius})`);
+      }
+    });
+  }
   const desert = new Track(STAGES.find((s) => s.id === 'desert'));
   const buttes = [];
   desert.group.traverse((obj) => { if (obj.isMesh && obj.userData.kind === 'butte') buttes.push(obj); });
   assert.ok(buttes.length >= 3, `desert should raise several 3D buttes, saw ${buttes.length}`);
   buttes.forEach((butte) => {
-    const { center, radius } = butte.userData;
+    const { radius } = butte.userData;
     assert.ok(radius >= 80, 'a butte is a landmark, not a boulder');
     const box = new THREE.Box3().setFromBufferAttribute(butte.geometry.getAttribute('position'));
     assert.ok(box.max.y - box.min.y >= 80, 'butte should tower over the road');
-    for (let s = 0; s < desert.roadLength; s += 25) {
-      const f = desert.frameAt(s);
-      const d = Math.hypot(f.pos.x - center.x, f.pos.z - center.z);
-      assert.ok(d > radius + ROAD_CLEAR, `butte at s=${s} swallows the road (d=${d.toFixed(0)}, r=${radius})`);
-    }
   });
   // At least one butte is close enough to the road to parallax past it.
   const near = buttes.some((b) => {

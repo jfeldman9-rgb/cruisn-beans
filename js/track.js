@@ -899,17 +899,18 @@ export class Track {
   // Diamond Head: a tuff-cone crater with an irregular rim that peaks on the
   // seaward side, flat-shaded and vertex-colored khaki/olive like the real
   // thing. Built as geometry so it has parallax and occludes the horizon.
-  buildCrater(center, radius, height, seaward) {
+  buildCrater(center, radius, height, seaward, opts = {}) {
     const segs = 40;
-    const rings = [
+    const rings = opts.rings || [
       { rr: 1.0, hh: 0.0 }, { rr: 0.84, hh: 0.16 }, { rr: 0.66, hh: 0.5 },
       { rr: 0.5, hh: 1.0 }, { rr: 0.32, hh: 0.66 }, { rr: 0.0, hh: 0.56 },
     ];
     const peak = Math.atan2(seaward.z, seaward.x);
     const verts = []; const cols = []; const idx = [];
-    const low = new THREE.Color('#8f9350');
-    const mid = new THREE.Color('#bda06a');
-    const high = new THREE.Color('#a0865a');
+    const palette = opts.palette || { low: '#8f9350', mid: '#bda06a', high: '#a0865a' };
+    const low = new THREE.Color(palette.low);
+    const mid = new THREE.Color(palette.mid);
+    const high = new THREE.Color(palette.high);
     const c = new THREE.Color();
     rings.forEach((ring, ri) => {
       for (let k = 0; k <= segs; k++) {
@@ -945,7 +946,9 @@ export class Track {
     const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
       vertexColors: true, flatShading: true, fog: false, side: THREE.DoubleSide,
     }));
-    mesh.userData.kind = 'diamondHead';
+    mesh.userData.kind = opts.kind || 'diamondHead';
+    mesh.userData.radius = radius;
+    mesh.userData.center = center.clone();
     mesh.userData.peak = new THREE.Vector3(
       center.x + Math.cos(peak) * radius * 0.5, center.y + height, center.z + Math.sin(peak) * radius * 0.5,
     );
@@ -1048,6 +1051,22 @@ export class Track {
         const seaward = f.left.clone().multiplyScalar(Math.sign(lm.x) || 1);
         p.y = this.coast ? this.coast.seaLevel - 0.3 : -0.6;
         this.buildCrater(p, lm.r || 400, lm.h || 200, seaward);
+        return;
+      }
+      if (lm.kind === 'volcano' && lm.r) {
+        // A shield volcano far inland: forested skirt, bare brown flanks,
+        // dark summit. Its near rim faces the road so the cone reads as a
+        // silhouette above the ridge for the back half of the stage.
+        const toRoad = f.left.clone().multiplyScalar(-(Math.sign(lm.x) || 1));
+        p.y = -0.8;
+        this.buildCrater(p, lm.r, lm.h || 400, toRoad, {
+          kind: 'volcano',
+          palette: { low: '#6f7d46', mid: '#6b5748', high: '#3d3634' },
+          rings: [
+            { rr: 1.0, hh: 0.0 }, { rr: 0.8, hh: 0.2 }, { rr: 0.55, hh: 0.56 },
+            { rr: 0.3, hh: 1.0 }, { rr: 0.18, hh: 0.86 }, { rr: 0.0, hh: 0.8 },
+          ],
+        });
         return;
       }
       if (lm.kind === 'lighthouse') {
