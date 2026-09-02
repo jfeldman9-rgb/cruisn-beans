@@ -1360,7 +1360,19 @@ export class Race {
     // Leapfrog hop: the chase camera rides up with the car so it clears the
     // roof of the semi it is jumping instead of clipping through the trailer.
     const hopping = !car.grounded && car.airSource === 'leapfrog' && !this.demo;
-    const hopTarget = hopping ? 3 + car.yOff * 0.65 : 0;
+    let hopTarget = hopping ? 3 + car.yOff * 0.65 : 0;
+    // ...and stays above any vehicle it just jumped until the camera itself
+    // has passed the far bumper, so landing early does not drop the view back
+    // inside the box.
+    if (!this.demo && this.traffic) {
+      const camS = car.s - (rig.back + rig.pull * speed01);
+      for (const v of this.traffic) {
+        if (v.clearedBy !== car || v.retired) continue;
+        if (Math.abs(v.s - camS) < v.halfLen + 4 && Math.abs(v.x - car.x) < 6) {
+          hopTarget = Math.max(hopTarget, v.h + 2.5 - rig.lift);
+        }
+      }
+    }
     this.hopLift = (this.hopLift || 0) + (hopTarget - (this.hopLift || 0)) * Math.min(1, (hopTarget > (this.hopLift || 0) ? 14 : 6) * dt);
     camLift += this.hopLift;
     const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
@@ -1386,7 +1398,9 @@ export class Race {
     }
     // Aim toward the horizon so the view stays level; the low rig still shows
     // plenty of road because the camera sits just above the roofline.
-    if (!crane) lookPos.y += rig.aim + car.yOff * 0.25;
+    // During a hop the raised camera tilts down so the flying car and the roof
+    // it clears stay in frame instead of dropping off the bottom edge.
+    if (!crane) lookPos.y += rig.aim + car.yOff * 0.25 - this.hopLift * 1.4;
     this.camera.lookAt(lookPos);
     // A whisper of roll with lateral load sells the chassis leaning into bends.
     if (!crane && !this.demo) {
