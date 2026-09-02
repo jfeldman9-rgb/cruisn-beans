@@ -859,16 +859,18 @@ export class Track {
     ];
     const peak = Math.atan2(seaward.z, seaward.x);
     const verts = []; const cols = []; const idx = [];
-    const low = new THREE.Color('#78883f');
-    const mid = new THREE.Color('#a68d58');
-    const high = new THREE.Color('#8b7346');
+    const low = new THREE.Color('#8f9350');
+    const mid = new THREE.Color('#bda06a');
+    const high = new THREE.Color('#a0865a');
     const c = new THREE.Color();
     rings.forEach((ring, ri) => {
       for (let k = 0; k <= segs; k++) {
         const th = (k / segs) * Math.PI * 2;
-        const wobble = 1 + 0.07 * Math.sin(th * 3 + 0.6) + 0.045 * Math.sin(th * 7 + 2.1);
-        const profile = 0.56 + 0.44 * Math.pow(Math.max(0, Math.cos(th - peak)), 1.6)
-          + 0.05 * Math.sin(th * 5 + 1) + 0.03 * Math.sin(th * 11);
+        // Radial gullies give the flanks the fluted look of a tuff cone.
+        const wobble = 1 + 0.07 * Math.sin(th * 3 + 0.6) + 0.045 * Math.sin(th * 7 + 2.1)
+          + (ri === 1 || ri === 2 ? 0.06 * Math.sin(th * 13 + ri) : 0);
+        const profile = 0.52 + 0.48 * Math.pow(Math.max(0, Math.cos(th - peak)), 1.6)
+          + 0.05 * Math.sin(th * 5 + 1) + 0.06 * Math.sin(th * 13);
         const r = radius * ring.rr * (ri === 0 ? 1 : wobble);
         const y = height * ring.hh * (ri === 0 ? 0 : profile);
         verts.push(center.x + Math.cos(th) * r, center.y + y, center.z + Math.sin(th) * r);

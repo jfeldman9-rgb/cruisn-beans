@@ -157,7 +157,7 @@ export const STAGES = [
       { kind: 'seagull', count: 5 },
       { kind: 'pig', count: 4 },
     ],
-    traffic: { oncoming: 13, same: 7 },
+    traffic: { oncoming: 13, same: 5 },
   },
   {
     id: 'desert',

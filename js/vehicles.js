@@ -48,16 +48,36 @@ function box(w, h, d, materials, x = 0, y = 0, z = 0) {
   return m;
 }
 
+function hubTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#17171c'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#c9c9d4';
+  g.beginPath(); g.arc(32, 32, 18, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#5a5a66';
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    g.beginPath(); g.arc(32 + Math.cos(a) * 10, 32 + Math.sin(a) * 10, 3.5, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// One mesh per wheel: tire on the barrel, painted hub on both caps. Keeping
+// traffic at a handful of draw calls per vehicle matters on phones.
+const wheelGeoCache = new Map();
 function wheelMesh(r, w) {
   const tire = mat('tire', () => new THREE.MeshLambertMaterial({ color: '#17171c' }));
-  const hub = mat('hub', () => new THREE.MeshLambertMaterial({ color: '#c9c9d4' }));
-  const g = new THREE.Group();
-  const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 12), tire);
-  t.rotation.z = Math.PI / 2;
-  const h = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w + 0.04, 8), hub);
-  h.rotation.z = Math.PI / 2;
-  g.add(t, h);
-  return g;
+  const hub = mat('hub', () => new THREE.MeshLambertMaterial({ map: hubTexture() }));
+  const key = `${r}_${w}`;
+  if (!wheelGeoCache.has(key)) {
+    const geo = new THREE.CylinderGeometry(r, r, w, 10);
+    geo.rotateZ(Math.PI / 2);
+    wheelGeoCache.set(key, geo);
+  }
+  return new THREE.Mesh(wheelGeoCache.get(key), [tire, hub, hub]);
 }
 
 function addWheels(group, wheels, positions, r, w) {

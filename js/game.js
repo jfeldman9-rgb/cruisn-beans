@@ -351,9 +351,11 @@ export class Race {
       for (let i = 0; i < N; i++) pos[i * 3 + 1] = -999;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      // Normal blending with modest alpha: the close chase camera sits right
+      // in the exhaust cloud, and additive puffs whited out the whole frame.
       const mat = new THREE.PointsMaterial({
         map: tex.fartPuffTexture(), size, transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, sizeAttenuation: true, color,
+        blending: THREE.NormalBlending, opacity: 0.5, sizeAttenuation: true, color,
       });
       const points = new THREE.Points(geo, mat);
       points.frustumCulled = false;
@@ -362,8 +364,8 @@ export class Race {
       this.systems.push(sys);
       return sys;
     };
-    this.fartSys = mk('#bfff7a', 2.8);
-    this.dustSys = mk('#d9c9a5', 2.2);
+    this.fartSys = mk('#9fe56a', 1.9);
+    this.dustSys = mk('#d9c9a5', 2.0);
   }
 
   emit(sys, p, v, spread = 0.6) {
@@ -617,10 +619,9 @@ export class Race {
       car.worldPos(this.tmpV);
       this.tmpV.x -= f.tan.x * 3.2;
       this.tmpV.z -= f.tan.z * 3.2;
-      this.tmpV.y += 0.7 + car.yOff;
-      const n = Math.random() < dt * 40 ? 2 : 1;
-      for (let i = 0; i < n; i++) {
-        this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 8, z: -f.tan.z * 8 }, 1.1);
+      this.tmpV.y += 0.5 + car.yOff;
+      if (Math.random() < dt * 34) {
+        this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 9, z: -f.tan.z * 9 }, 1.0);
       }
     }
 
@@ -1259,12 +1260,15 @@ export class Race {
         const full = car.isPlayer ? (car.wheelieFullT || WHEELIE_TIME) : 1.2;
         const t = car.isPlayer ? car.wheelieT : car.aiWheelieT;
         const elapsed = full - t;
-        // Nose snaps up fast, holds, and settles as the wheelie ends.
+        // Nose snaps up fast, holds, and settles as the wheelie ends. The
+        // quad's roof rotates toward the camera (positive local X), which is
+        // what a rear-axle wheelie looks like from the chase seat; the
+        // opposite sign read as the car diving nose-first.
         const k = Math.min(1, elapsed / 0.22) * Math.min(1, t / 0.3);
-        pitch = -0.58 * Math.max(0, k);
+        pitch = 0.62 * Math.max(0, k);
       }
       if (car.flipping) {
-        if (car.flipAxis === 'x') pitch = -car.flipProg;
+        if (car.flipAxis === 'x') pitch = car.flipProg;
         else roll = car.flipProg * (car.flipDir || 1);
       }
       if (car.twoWheelT > 0) {
