@@ -27,7 +27,8 @@
   <button id="btn-start" class="big-btn blink" disabled>LOADING DRIVERS...</button>
   <div class="title-foot">A LOVING 90s ARCADE PARODY &bull; NO QUARTERS NEEDED<br>
   NOT AFFILIATED WITH ANY REAL RACE, CAR, OR BEAN<br>
-  <span class="soundtrack-credit">NOW PLAYING &bull; CRUIS'N THE WORLD BY JFELDMAN9</span></div>
+  <span class="soundtrack-credit">NOW PLAYING &bull; CRUIS'N THE WORLD BY JFELDMAN9</span>
+  <div id="title-records"></div></div>
 </div>
 
 <!-- RACER SELECT -->
@@ -41,6 +42,12 @@
 <div id="screen-track" class="screen">
   <div class="screen-head">CHOOSE YOUR CRUISE</div>
   <div id="track-cards" class="cards tracks"></div>
+  <button id="btn-tour" class="card tour-card">
+    <div class="tour-badge">NEW</div>
+    <div class="card-name">WORLD TOUR</div>
+    <div class="card-tag">HAWAII &#9654; DESERT &#9654; TEQUILA &bull; POINTS EVERY STAGE &bull; DNF ENDS THE TOUR</div>
+    <div id="tour-best" class="card-tag target">NO CHAMPION YET</div>
+  </button>
   <button id="btn-track-back" class="back-btn">&#9664; BACK</button>
 </div>
 
@@ -78,7 +85,17 @@
   <div id="results-title">1st PLACE!</div>
   <div id="results-sub"></div>
   <div id="finale-gag"></div>
+  <div id="initials-entry">
+    <div class="initials-head">NEW RECORD! <span id="initials-rank">#1</span><small>ENTER YOUR INITIALS &bull; TAP A LETTER, USE THE ARROWS, OR TYPE</small></div>
+    <div class="initials-slots">
+      <div class="slot" data-slot="0"><button class="slot-up" aria-label="Next letter">&#9650;</button><span class="slot-letter">A</span><button class="slot-down" aria-label="Previous letter">&#9660;</button></div>
+      <div class="slot" data-slot="1"><button class="slot-up" aria-label="Next letter">&#9650;</button><span class="slot-letter">A</span><button class="slot-down" aria-label="Previous letter">&#9660;</button></div>
+      <div class="slot" data-slot="2"><button class="slot-up" aria-label="Next letter">&#9650;</button><span class="slot-letter">A</span><button class="slot-down" aria-label="Previous letter">&#9660;</button></div>
+    </div>
+    <button id="btn-initials-ok" class="big-btn">OK</button>
+  </div>
   <div id="results-list"></div>
+  <div id="records-strip"></div>
   <div class="results-btns">
     <button id="btn-retry" class="big-btn">RETRY</button>
     <button id="btn-title" class="big-btn alt">TITLE</button>
