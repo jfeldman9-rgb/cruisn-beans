@@ -78,9 +78,11 @@ just type. Bests show on the stage cards, the results strip, and the title.
   built from segment lists (bend/elevation/zone) into one long spline road
   with chunked geometry for frustum culling and far landmark draw distance,
   plus a short run-off past FINISH for the finish crane camera.
-- Hero landmarks are real geometry, not cards: Diamond Head is a vertex-colored
-  tuff cone, the Desert buttes are banded flat-tops, Waikiki towers and Tequila
-  blocks are textured boxes. Hawaii is a `coast` stage: there is no ground
+- Hero landmarks are real geometry, not cards: Diamond Head and the inland
+  volcano are vertex-colored cones, the Desert buttes are banded flat-tops,
+  Waikiki towers and Tequila blocks are textured boxes. The Hawaii backdrop
+  (`assets/env/hawaii-backdrop.webp`) is one volcano section of the painting
+  with blurred sea/sky wings, so the mirrored wrap never shows a twin volcano. Hawaii is a `coast` stage: there is no ground
   plane; land is a ribbon inland of the road and the sea sits 12 units below
   it behind a cliff, beach, animated surf line and guardrail
   (`Track.buildCoast`).
