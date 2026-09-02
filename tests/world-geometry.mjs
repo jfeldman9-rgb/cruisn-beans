@@ -117,6 +117,63 @@ for (const def of STAGES) {
   checks++;
 }
 
+// Desert buttes and Tequila blocks are geometry, not cards, and stay off the road.
+{
+  const ROAD_CLEAR = 16;
+  const desert = new Track(STAGES.find((s) => s.id === 'desert'));
+  const buttes = [];
+  desert.group.traverse((obj) => { if (obj.isMesh && obj.userData.kind === 'butte') buttes.push(obj); });
+  assert.ok(buttes.length >= 3, `desert should raise several 3D buttes, saw ${buttes.length}`);
+  buttes.forEach((butte) => {
+    const { center, radius } = butte.userData;
+    assert.ok(radius >= 80, 'a butte is a landmark, not a boulder');
+    const box = new THREE.Box3().setFromBufferAttribute(butte.geometry.getAttribute('position'));
+    assert.ok(box.max.y - box.min.y >= 80, 'butte should tower over the road');
+    for (let s = 0; s < desert.roadLength; s += 25) {
+      const f = desert.frameAt(s);
+      const d = Math.hypot(f.pos.x - center.x, f.pos.z - center.z);
+      assert.ok(d > radius + ROAD_CLEAR, `butte at s=${s} swallows the road (d=${d.toFixed(0)}, r=${radius})`);
+    }
+  });
+  // At least one butte is close enough to the road to parallax past it.
+  const near = buttes.some((b) => {
+    let best = Infinity;
+    for (let s = 0; s < desert.roadLength; s += 25) {
+      const f = desert.frameAt(s);
+      best = Math.min(best, Math.hypot(f.pos.x - b.userData.center.x, f.pos.z - b.userData.center.z) - b.userData.radius);
+    }
+    return best < 200;
+  });
+  assert.ok(near, 'no butte comes near enough to the road to read as scenery you pass');
+
+  const tequila = new Track(STAGES.find((s) => s.id === 'tequila'));
+  const blocks = [];
+  tequila.group.traverse((obj) => { if (obj.isMesh && obj.userData.kind === 'prop_building') blocks.push(obj); });
+  assert.ok(blocks.length >= 3, 'tequila should have chunked building blocks');
+  blocks.forEach((mesh) => {
+    const pos = mesh.geometry.getAttribute('position');
+    // A box is 12 triangles; a merged run of cards is 2 per building.
+    assert.equal(pos.count % 36, 0, 'buildings should be boxes, not planes');
+    const box = new THREE.Box3().setFromBufferAttribute(pos);
+    assert.ok(box.max.x - box.min.x > 8 && box.max.z - box.min.z > 8, 'building chunk has footprint depth');
+    assert.ok(box.max.y - box.min.y > 12, 'buildings should be at least two storeys');
+  });
+  // No block sits on the asphalt.
+  for (let s = 0; s < tequila.length; s += 20) {
+    const f = tequila.frameAt(s);
+    blocks.forEach((mesh) => {
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 3) {
+        const dx = pos.getX(i) - f.pos.x; const dz = pos.getZ(i) - f.pos.z;
+        const lateral = Math.abs(dx * f.left.x + dz * f.left.z);
+        const along = Math.abs(dx * f.tan.x + dz * f.tan.z);
+        if (along < 6) assert.ok(lateral > 12, `building corner on the road at s=${s} (lateral ${lateral.toFixed(1)})`);
+      }
+    });
+  }
+  checks++;
+}
+
 // Panorama scroll: the UV window offset must move with yaw and never flag a re-upload.
 {
   const race = new Race({

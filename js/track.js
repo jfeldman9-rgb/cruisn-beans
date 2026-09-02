@@ -756,7 +756,7 @@ export class Track {
         }
         const scale = kind === 'palm' ? 0.85 + rnd() * 0.6 : kind === 'rock' || kind === 'lavarock' ? 0.5 + rnd() * 0.45 : 1;
         if (!placements.has(kind)) placements.set(kind, []);
-        placements.get(kind).push({ p, angle, scale });
+        placements.get(kind).push({ p, angle, scale, side, left: f.left, s });
       }
     }
     this.buildTowers(towers);
@@ -767,6 +767,7 @@ export class Track {
     // Merge per kind in spatial chunks of ~500 units for frustum culling.
     placements.forEach((list, kind) => {
       const [t, w, h] = this.propTexture(kind);
+      if (kind === 'building') { this.buildBlockBuildings(list, t, w, h); return; }
       // Text-bearing props are single-sided so their text never mirrors.
       const hasText = kind.startsWith('sign_') || kind === 'building_surf';
       // Text stays unlit and one-sided so it reads correctly. Natural props
@@ -830,6 +831,53 @@ export class Track {
       mesh.position.set(p.x, p.y + h / 2 - 0.5, p.z);
       mesh.rotation.y = angle;
       mesh.userData.kind = 'tower';
+      this.group.add(mesh);
+    });
+  }
+
+  buildBlockBuildings(list, wallTex, w, h) {
+    // TEQUILA TOWN's adobe blocks are boxes with the facade parallel to the
+    // street, so the town is a canyon with corners you drive between rather
+    // than a row of cards that face the camera and vanish edge-on.
+    if (!list.length) return;
+    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+    const wall = new THREE.MeshLambertMaterial({ map: wallTex });
+    const chunks = new Map();
+    list.forEach(({ p, side, left, s }, n) => {
+      // Deterministic per-placement variety without touching the seeded RNG.
+      const hash = ((Math.imul(n + 1, 2654435761) >>> 0) % 1000) / 1000;
+      const hash2 = ((Math.imul(n + 7, 1103515245) >>> 0) % 1000) / 1000;
+      const along = w * (0.8 + hash * 0.5);
+      const depth = 10 + hash2 * 8;
+      const height = h * (0.75 + ((hash * 7) % 1) * 0.6);
+      const geo = new THREE.BoxGeometry(along, height, depth);
+      const uv = geo.attributes.uv;
+      // Face order +x,-x,+y,-y,+z,-z. Walls repeat the facade tile in
+      // proportion so doors and windows keep their size; the top samples a
+      // sliver of the tile-roof band so the roof reads from the crest of a
+      // hill without a second material.
+      for (let i = 0; i < uv.count; i++) {
+        const face = Math.floor(i / 4);
+        if (face === 2 || face === 3) { uv.setXY(i, uv.getX(i), 0.86 + uv.getY(i) * 0.02); continue; }
+        const faceW = face < 2 ? depth : along;
+        uv.setXY(i, uv.getX(i) * (faceW / w), uv.getY(i) * (height / h));
+      }
+      // The card sat centred at p; the block's near facade stays there and
+      // its depth extends away from the road. Rotating by the frame's left
+      // heading puts the along x height faces parallel to the street.
+      const center = p.clone().addScaledVector(left, side * depth / 2);
+      const heading = Math.atan2(left.x, left.z);
+      geo.applyMatrix4(new THREE.Matrix4().makeRotationY(heading)
+        .setPosition(center.x, center.y + height / 2 - 0.4, center.z));
+      const key = Math.floor(s / 500);
+      if (!chunks.has(key)) chunks.set(key, []);
+      chunks.get(key).push(geo);
+    });
+    chunks.forEach((items) => {
+      const merged = mergeGeometries(items);
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, wall);
+      mesh.userData.kind = 'prop_building';
       this.group.add(mesh);
     });
   }
@@ -907,6 +955,63 @@ export class Track {
     return mesh;
   }
 
+  // Monument Valley butte: talus skirt, sheer banded walls, flat cap. Real
+  // geometry so the last third of DESERT HIGHWAY has parallax instead of a
+  // painted mesa that never gets closer.
+  buildButte(center, radius, height, n = 0) {
+    const segs = 28;
+    const rings = [
+      { rr: 1.0, hh: 0.0 }, { rr: 0.86, hh: 0.14 }, { rr: 0.74, hh: 0.34 },
+      { rr: 0.72, hh: 0.72 }, { rr: 0.66, hh: 1.0 }, { rr: 0.0, hh: 1.0 },
+    ];
+    const verts = []; const cols = []; const idx = [];
+    const talus = new THREE.Color('#c98a58');
+    const wall = new THREE.Color('#b0552f');
+    const band = new THREE.Color('#84391f');
+    const cap = new THREE.Color('#cf7444');
+    const c = new THREE.Color();
+    rings.forEach((ring, ri) => {
+      for (let k = 0; k <= segs; k++) {
+        const th = (k / segs) * Math.PI * 2;
+        // Buttresses and alcoves; the same wobble on every wall ring keeps
+        // the cliff faces vertical.
+        const wobble = 1 + 0.09 * Math.sin(th * 2 + n) + 0.06 * Math.sin(th * 5 + 1.3 * n) + 0.035 * Math.sin(th * 11);
+        const r = radius * ring.rr * (ri === 0 ? 1 : wobble);
+        const y = height * ring.hh;
+        verts.push(center.x + Math.cos(th) * r, center.y + y, center.z + Math.sin(th) * r);
+        if (ri <= 1) c.copy(talus).lerp(wall, ri);
+        else if (ri === 2) c.copy(wall);
+        else if (ri === 3) c.copy(band).lerp(wall, 0.35);
+        else c.copy(cap);
+        c.offsetHSL(0, 0, 0.05 * Math.sin(th * 7 + ri * 2));
+        cols.push(c.r, c.g, c.b);
+      }
+    });
+    const stride = segs + 1;
+    for (let ri = 0; ri < rings.length - 1; ri++) {
+      for (let k = 0; k < segs; k++) {
+        const a = ri * stride + k; const b = a + 1; const d = a + stride; const e = d + 1;
+        idx.push(a, b, d, b, e, d);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+      vertexColors: true, flatShading: true, fog: false, side: THREE.DoubleSide,
+    }));
+    mesh.userData.kind = 'butte';
+    mesh.userData.radius = radius;
+    mesh.userData.center = center.clone();
+    this.group.add(mesh);
+    this.landmarkMeshes = this.landmarkMeshes || [];
+    this.landmarkMeshes.push(mesh);
+    return mesh;
+  }
+
   buildLighthouse(p, w, h) {
     const group = new THREE.Group();
     const tower = new THREE.Mesh(
@@ -930,10 +1035,15 @@ export class Track {
       // The authored panoramas already carry the broad postcard silhouettes.
       // Keep gates and near hero props in 3D, but do not stamp a second giant
       // volcano, cruise ship, or mesa over the painted one.
-      if (this.def.panorama && ['volcano', 'cruiseShip', 'mesaBig'].includes(lm.kind)) return;
+      if (this.def.panorama && ['volcano', 'cruiseShip', 'mesaBig'].includes(lm.kind) && !lm.r) return;
       const s = lm.at * this.length;
       const f = this.frameAt(s);
       const p = f.pos.clone().addScaledVector(f.left, lm.x);
+      if (lm.kind === 'mesaBig' && lm.r) {
+        p.y = -0.6;
+        this.buildButte(p, lm.r, lm.h || 200, Math.round(lm.at * 100));
+        return;
+      }
       if (lm.kind === 'diamondHead') {
         const seaward = f.left.clone().multiplyScalar(Math.sign(lm.x) || 1);
         p.y = this.coast ? this.coast.seaLevel - 0.3 : -0.6;

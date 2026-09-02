@@ -193,9 +193,12 @@ export const STAGES = [
     },
     landmarks: [
       { kind: 'route66Gate', at: 0.25, x: 0, w: 50, h: 25 },
-      { kind: 'mesaBig', at: 0.98, x: -260, w: 700, h: 260 },
-      { kind: 'mesaBig', at: 0.92, x: 300, w: 600, h: 220 },
-      { kind: 'mesaBig', at: 0.8, x: -350, w: 500, h: 200 },
+      // Buttes with a radius are built as geometry (see Track.buildButte);
+      // the painted panorama keeps the far horizon.
+      { kind: 'mesaBig', at: 0.98, x: -300, r: 230, h: 175 },
+      { kind: 'mesaBig', at: 0.91, x: 330, r: 200, h: 150 },
+      { kind: 'mesaBig', at: 0.83, x: -260, r: 150, h: 120 },
+      { kind: 'mesaBig', at: 0.74, x: 240, r: 110, h: 95 },
       { kind: 'dinerSign', at: 0.35, x: 30, w: 26, h: 40 },
     ],
     shortcut: { enter: 0.29, exit: 0.50, side: -1, label: 'DRY RIVERBED' },
