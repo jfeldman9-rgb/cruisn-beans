@@ -30,6 +30,12 @@ function loadSprite(url) {
   return spriteCache.get(url);
 }
 
+// How much world yaw (radians) one 16:9 panorama painting spans. The visible
+// window slides across the art as the road bends, so the volcano, mesas, and
+// church stay in a fixed compass direction like a cabinet's scrolling backdrop.
+const PANORAMA_SPAN = 2.6;
+const PANORAMA_ASPECT = 16 / 9;
+
 const panoramaCache = new Map();
 function loadPanorama(url) {
   if (!panoramaCache.has(url)) {
@@ -38,6 +44,10 @@ function loadPanorama(url) {
     t.minFilter = THREE.LinearMipmapLinearFilter;
     t.generateMipmaps = true;
     t.colorSpace = THREE.SRGBColorSpace;
+    // Mirrored wrap: long bends scroll past the painting's edge into a
+    // reflected copy instead of a hard seam or a smeared clamp.
+    t.wrapS = THREE.MirroredRepeatWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
     panoramaCache.set(url, t);
   }
   return panoramaCache.get(url);
@@ -253,7 +263,7 @@ export class Race {
       : null;
     this.scene.background = this.panoramaTexture || new THREE.Color(opts.trackDef.sky[0]);
     this.camera = new THREE.PerspectiveCamera(71, 16 / 9, 0.5, 9000);
-    this.panoramaViewAspect = 0;
+    this.tmpV2 = new THREE.Vector3();
     this.updatePanoramaCrop();
 
     // Legend-style lighting discipline without mobile-expensive dynamic
@@ -1260,7 +1270,6 @@ export class Race {
   }
 
   updateCamera(dt) {
-    this.updatePanoramaCrop();
     const car = this.player;
     const mode = this.cameraMode;
     let anchorPos;
@@ -1305,6 +1314,7 @@ export class Race {
     const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0);
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, 5 * dt);
     this.camera.updateProjectionMatrix();
+    this.updatePanoramaCrop();
   }
 
   cycleCamera() {
@@ -1313,22 +1323,28 @@ export class Race {
     return this.cameraModes[this.cameraMode];
   }
 
+  // Slide the background painting with the camera's heading. Called every
+  // frame after the camera is aimed; only cheap uniform math, no re-upload.
   updatePanoramaCrop() {
     if (!this.panoramaTexture || !this.camera) return;
-    const viewAspect = Math.max(0.1, this.camera.aspect || (16 / 9));
-    if (Math.abs(viewAspect - this.panoramaViewAspect) < 0.0001) return;
-    const artAspect = 16 / 9;
-    if (viewAspect > artAspect) {
-      const repeatY = artAspect / viewAspect;
-      this.panoramaTexture.repeat.set(1, repeatY);
-      this.panoramaTexture.offset.set(0, (1 - repeatY) * 0.5);
-    } else {
-      const repeatX = viewAspect / artAspect;
-      this.panoramaTexture.repeat.set(repeatX, 1);
-      this.panoramaTexture.offset.set((1 - repeatX) * 0.5, 0);
+    const viewAspect = Math.max(0.1, this.camera.aspect || PANORAMA_ASPECT);
+    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * viewAspect);
+    // Visible slice of the art = the camera's horizontal FOV as a fraction of
+    // the yaw span the painting represents, cropped to the view's aspect.
+    let fx = Math.min(1, hfov / PANORAMA_SPAN);
+    let fy = fx * PANORAMA_ASPECT / viewAspect;
+    if (fy > 1) {
+      fy = 1;
+      fx = viewAspect / PANORAMA_ASPECT;
     }
-    this.panoramaTexture.needsUpdate = true;
-    this.panoramaViewAspect = viewAspect;
+    this.camera.getWorldDirection(this.tmpV2);
+    const yaw = Math.atan2(this.tmpV2.x, this.tmpV2.z);
+    // World +x is screen-left in this right-handed frame: turning toward
+    // increasing yaw makes the horizon slide right, i.e. the UV window moves
+    // toward smaller u.
+    this.panoramaTexture.repeat.set(fx, fy);
+    this.panoramaTexture.offset.set((1 - fx) * 0.5 - yaw * (fx / hfov), (1 - fy) * 0.5);
   }
 
   hud() {
