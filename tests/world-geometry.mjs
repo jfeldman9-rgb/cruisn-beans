@@ -77,21 +77,110 @@ for (const def of STAGES) {
   checks++;
 }
 
-// Ocean above ground on the coast.
+// The Hawaii sea is a real drop below the road, not a texture beside it.
 {
-  const hawaii = new Track(STAGES.find((s) => s.id === 'hawaii'));
-  const oceanMeshes = [];
+  const def = STAGES.find((s) => s.id === 'hawaii');
+  const hawaii = new Track(def);
+  const byKind = new Map();
   hawaii.group.traverse((obj) => {
-    if (obj.isMesh && obj.material && obj.material.map && obj.material.roughness === 0.28) oceanMeshes.push(obj);
+    const kind = obj.userData && obj.userData.kind;
+    if (kind && obj.isMesh) byKind.set(kind, [...(byKind.get(kind) || []), obj]);
   });
-  assert.ok(oceanMeshes.length > 0, 'Hawaii should build ocean ribbons');
-  const groundY = -0.6;
-  oceanMeshes.forEach((m) => {
+  for (const kind of ['ocean', 'shelf', 'beach', 'cliff', 'foam']) {
+    assert.ok((byKind.get(kind) || []).length > 0, `Hawaii should build ${kind} strips`);
+  }
+  const sea = def.coast.seaLevel;
+  ['ocean', 'shelf'].forEach((kind) => byKind.get(kind).forEach((m) => {
     const pos = m.geometry.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
-      assert.ok(pos.getY(i) > groundY, `ocean vertex at y=${pos.getY(i)} is under the ground plane`);
+      assert.ok(Math.abs(pos.getY(i) - sea) < 0.2, `${kind} vertex at y=${pos.getY(i)} is not at sea level ${sea}`);
     }
+  }));
+  // Every point of the road sits well above the water.
+  for (let s = 0; s < hawaii.roadLength; s += 50) {
+    assert.ok(hawaii.frameAt(s).pos.y - sea >= 8, `road at s=${s} is not high above the sea`);
+  }
+  // No ground plane: the island stage builds land as a ribbon so the sea can
+  // sit lower than the grass without being buried by it.
+  let bigPlane = false;
+  hawaii.group.traverse((obj) => {
+    if (obj.isMesh && obj.geometry.type === 'PlaneGeometry' && obj.geometry.parameters.width > 5000) bigPlane = true;
   });
+  assert.equal(bigPlane, false, 'coast stage must not use a world ground plane');
+  // Other stages keep their plane.
+  const desert = new Track(STAGES.find((s) => s.id === 'desert'));
+  let desertPlane = false;
+  desert.group.traverse((obj) => {
+    if (obj.isMesh && obj.geometry.type === 'PlaneGeometry' && obj.geometry.parameters.width > 5000) desertPlane = true;
+  });
+  assert.equal(desertPlane, true);
+  checks++;
+}
+
+// Desert buttes and Tequila blocks are geometry, not cards, and stay off the road.
+{
+  const ROAD_CLEAR = 16;
+  // Every cone landmark on every stage (buttes, Diamond Head, the inland
+  // volcano) must leave the whole road, run-off included, outside its skirt.
+  const coneKinds = new Set(['butte', 'diamondHead', 'volcano']);
+  for (const def of STAGES) {
+    const track = new Track(def);
+    track.group.traverse((obj) => {
+      if (!obj.isMesh || !coneKinds.has(obj.userData.kind)) return;
+      const { center, radius } = obj.userData;
+      for (let s = 0; s < track.roadLength; s += 25) {
+        const f = track.frameAt(s);
+        const d = Math.hypot(f.pos.x - center.x, f.pos.z - center.z);
+        assert.ok(d > radius + ROAD_CLEAR, `${def.id}: ${obj.userData.kind} at s=${s} swallows the road (d=${d.toFixed(0)}, r=${radius})`);
+      }
+    });
+  }
+  const desert = new Track(STAGES.find((s) => s.id === 'desert'));
+  const buttes = [];
+  desert.group.traverse((obj) => { if (obj.isMesh && obj.userData.kind === 'butte') buttes.push(obj); });
+  assert.ok(buttes.length >= 3, `desert should raise several 3D buttes, saw ${buttes.length}`);
+  buttes.forEach((butte) => {
+    const { radius } = butte.userData;
+    assert.ok(radius >= 80, 'a butte is a landmark, not a boulder');
+    const box = new THREE.Box3().setFromBufferAttribute(butte.geometry.getAttribute('position'));
+    assert.ok(box.max.y - box.min.y >= 80, 'butte should tower over the road');
+  });
+  // At least one butte is close enough to the road to parallax past it.
+  const near = buttes.some((b) => {
+    let best = Infinity;
+    for (let s = 0; s < desert.roadLength; s += 25) {
+      const f = desert.frameAt(s);
+      best = Math.min(best, Math.hypot(f.pos.x - b.userData.center.x, f.pos.z - b.userData.center.z) - b.userData.radius);
+    }
+    return best < 200;
+  });
+  assert.ok(near, 'no butte comes near enough to the road to read as scenery you pass');
+
+  const tequila = new Track(STAGES.find((s) => s.id === 'tequila'));
+  const blocks = [];
+  tequila.group.traverse((obj) => { if (obj.isMesh && obj.userData.kind === 'prop_building') blocks.push(obj); });
+  assert.ok(blocks.length >= 3, 'tequila should have chunked building blocks');
+  blocks.forEach((mesh) => {
+    const pos = mesh.geometry.getAttribute('position');
+    // A box is 12 triangles; a merged run of cards is 2 per building.
+    assert.equal(pos.count % 36, 0, 'buildings should be boxes, not planes');
+    const box = new THREE.Box3().setFromBufferAttribute(pos);
+    assert.ok(box.max.x - box.min.x > 8 && box.max.z - box.min.z > 8, 'building chunk has footprint depth');
+    assert.ok(box.max.y - box.min.y > 12, 'buildings should be at least two storeys');
+  });
+  // No block sits on the asphalt.
+  for (let s = 0; s < tequila.length; s += 20) {
+    const f = tequila.frameAt(s);
+    blocks.forEach((mesh) => {
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 3) {
+        const dx = pos.getX(i) - f.pos.x; const dz = pos.getZ(i) - f.pos.z;
+        const lateral = Math.abs(dx * f.left.x + dz * f.left.z);
+        const along = Math.abs(dx * f.tan.x + dz * f.tan.z);
+        if (along < 6) assert.ok(lateral > 12, `building corner on the road at s=${s} (lateral ${lateral.toFixed(1)})`);
+      }
+    });
+  }
   checks++;
 }
 
@@ -116,8 +205,12 @@ for (const def of STAGES) {
   race.updatePanoramaCrop();
   const straight = race.panoramaTexture.offset.x;
   const repeatX = race.panoramaTexture.repeat.x;
-  assert.ok(repeatX > 0.5 && repeatX < 0.8, `visible slice ${repeatX} should zoom the 16:9 art`);
-  assert.ok(Math.abs(race.panoramaTexture.repeat.y - repeatX) < 1e-6, 'crop keeps the view aspect at 16:9');
+  const artAspect = STAGES[0].panoramaAspect || 16 / 9;
+  assert.ok(repeatX > 0.35 && repeatX < 0.8, `visible slice ${repeatX} should zoom into the art`);
+  assert.ok(Math.abs(race.panoramaTexture.repeat.y / repeatX - artAspect / (16 / 9)) < 1e-6, 'crop keeps the view aspect');
+  const horizon = STAGES[0].panoramaHorizon ?? 0.5;
+  const vCenter = race.panoramaTexture.offset.y + race.panoramaTexture.repeat.y / 2;
+  assert.ok(Math.abs(vCenter - horizon) < 0.12, `painting horizon ${horizon} should sit near the view center (${vCenter})`);
   race.camera.lookAt(100, 10, 0); // yaw +90 degrees toward +x (screen-left)
   race.updatePanoramaCrop();
   const turned = race.panoramaTexture.offset.x;

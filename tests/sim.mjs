@@ -87,10 +87,12 @@ for (let frame = 0; frame < 60 * 360 && race.state !== 'over'; frame++) {
   } else if (car.s > shortcut.s1 - 150 && car.s < shortcut.s1 + 20) {
     targetX = shortcut.side * 10.5;
   } else {
+    // Traffic is real 3D geometry with length now, so the scripted driver
+    // gives a slow car a full lane of clearance instead of skimming past it.
     const blocker = race.traffic
       .filter((v) => !v.oncoming && v.s > car.s && v.s - car.s < 165)
       .sort((a, b) => a.s - b.s)[0];
-    if (blocker && Math.abs(blocker.x - targetX) < 4) targetX = 10.5;
+    if (blocker && Math.abs(blocker.x - targetX) < 4) targetX = Math.min(11, blocker.x + 5.2);
   }
   const curv = race.track.curvatureAt(car.s);
   const denom = car.racer.steer * (34 + car.speed * 0.55);

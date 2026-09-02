@@ -2,9 +2,10 @@
 // double-tap-gas wheelie turbo, two-wheel and flip stunts, hittable
 // animals, one real shortcut, checkpoint clock with DNF.
 import * as THREE from '../vendor/three.module.js';
-import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=next-level-1';
-import * as tex from './tex.js?v=next-level-1';
-import { audio } from './audio.js?v=next-level-1';
+import { Track, ROAD_HALF, SHOULDER, LANE_PLAYER, LANE_ONCOMING } from './track.js?v=world-feel-2';
+import * as tex from './tex.js?v=world-feel-2';
+import { audio } from './audio.js?v=world-feel-2';
+import { buildVehicle } from './vehicles.js?v=world-feel-2';
 
 const MAX_X = ROAD_HALF + SHOULDER - 1.5;
 const WHEELIE_TIME = 1.9;
@@ -170,31 +171,33 @@ class Traffic {
     this.wrongWay = oncoming && index === 0;
     const kindRoll = Math.random();
     if (oncoming) {
-      if (this.wrongWay || kindRoll < 0.34) { this.kind = 'semi'; this.w = 7.4; this.h = 6.6; }
-      else if (kindRoll < 0.55) { this.kind = 'bus'; this.w = 6.6; this.h = 6.6; }
-      else { this.kind = 'sedan'; this.w = 5.2; this.h = 3.3; }
+      if (this.wrongWay || kindRoll < 0.34) this.kind = 'semi';
+      else if (kindRoll < 0.55) this.kind = 'bus';
+      else this.kind = 'sedan';
     } else {
       this.kind = 'sedan';
-      this.w = 5.2; this.h = 3.3;
     }
-    const colors = ['#4f8fe0', '#7fbf5a', '#c9c9d4', '#a065c9', '#e0b34f'];
-    const color = colors[(Math.random() * colors.length) | 0];
-    let t;
-    if (this.kind === 'semi') t = externalImageLoading
-      ? loadSprite('assets/img/premium/traffic-semi-front.webp?v=visual-pass-1')
-      : tex.semiFrontTexture();
-    else if (this.kind === 'bus') t = tex.busFrontTexture();
-    else if (oncoming && externalImageLoading) {
-      t = loadSprite('assets/img/premium/traffic-sedan-front.webp?v=visual-pass-1');
-    } else t = oncoming ? tex.sedanFrontTexture(color) : tex.sedanRearTexture(color);
-    this.mesh = makeQuad(t, this.w, this.h);
+    const colors = ['#4f8fe0', '#7fbf5a', '#c9c9d4', '#a065c9', '#e0b34f', '#d9612c', '#e8e8ec'];
+    const semiColors = ['#2a4fd6', '#c8262d', '#1f9e46', '#e8e8ec'];
+    const color = (this.kind === 'semi' ? semiColors : colors)[(Math.random() * (this.kind === 'semi' ? semiColors.length : colors.length)) | 0];
+    // Real 3D vehicles: they show a flank on bends, their wheels turn, and
+    // their length is what the collision and leapfrog windows measure.
+    const built = buildVehicle(this.kind, color);
+    this.body = built.group;
+    this.body.rotation.order = 'YXZ';
+    this.wheels = built.wheels;
+    this.halfLen = built.halfLen;
+    this.w = built.w;
+    this.h = built.h;
     this.shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.w, this.w * 0.45),
+      new THREE.PlaneGeometry(this.w * 1.1, this.halfLen * 2.1),
       new THREE.MeshBasicMaterial({ map: tex.blobShadowTexture(), transparent: true, depthWrite: false }),
     );
     this.shadow.rotation.x = -Math.PI / 2;
+    this.shadow.position.y = 0.06;
+    this.body.add(this.shadow);
     this.group = new THREE.Group();
-    this.group.add(this.mesh, this.shadow);
+    this.group.add(this.body);
     // Spread the fleet along the road.
     // Offset the same-way stream by half a slot. Previously its first car and
     // the authored wrong-lane semi spawned at the exact same distance, making
@@ -257,7 +260,8 @@ export class Race {
     this.track = new Track(opts.trackDef);
     this.scene.add(this.track.group);
     // Long draw distance: haze starts far out, landmarks ignore fog entirely.
-    this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, 420, 1700);
+    const fogRange = opts.trackDef.fog || [620, 2300];
+    this.scene.fog = new THREE.Fog(opts.trackDef.fogColor, fogRange[0], fogRange[1]);
     this.panoramaTexture = opts.trackDef.panorama && externalImageLoading
       ? loadPanorama(opts.trackDef.panorama)
       : null;
@@ -326,8 +330,11 @@ export class Race {
     this.lastBumpSound = 0;
     this.lastHonk = 0;
     this.danger = false;
-    this.cameraModes = ['HIGH CHASE', 'ARCADE CHASE', 'BUMPER'];
+    // Default is the low, close, wide cabinet chase. The helicopter view is
+    // still available for players who want to read the whole pack.
+    this.cameraModes = ['ARCADE CHASE', 'HIGH CHASE', 'BUMPER'];
     this.cameraMode = 0;
+    this.speedRumble = 0;
 
     this.initParticles();
     this.tmpV = new THREE.Vector3();
@@ -344,9 +351,11 @@ export class Race {
       for (let i = 0; i < N; i++) pos[i * 3 + 1] = -999;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      // Normal blending with modest alpha: the close chase camera sits right
+      // in the exhaust cloud, and additive puffs whited out the whole frame.
       const mat = new THREE.PointsMaterial({
         map: tex.fartPuffTexture(), size, transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, sizeAttenuation: true, color,
+        blending: THREE.NormalBlending, opacity: 0.5, sizeAttenuation: true, color,
       });
       const points = new THREE.Points(geo, mat);
       points.frustumCulled = false;
@@ -355,8 +364,8 @@ export class Race {
       this.systems.push(sys);
       return sys;
     };
-    this.fartSys = mk('#bfff7a', 2.8);
-    this.dustSys = mk('#d9c9a5', 2.2);
+    this.fartSys = mk('#9fe56a', 1.9);
+    this.dustSys = mk('#d9c9a5', 2.0);
   }
 
   emit(sys, p, v, spread = 0.6) {
@@ -610,10 +619,9 @@ export class Race {
       car.worldPos(this.tmpV);
       this.tmpV.x -= f.tan.x * 3.2;
       this.tmpV.z -= f.tan.z * 3.2;
-      this.tmpV.y += 0.7 + car.yOff;
-      const n = Math.random() < dt * 40 ? 2 : 1;
-      for (let i = 0; i < n; i++) {
-        this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 8, z: -f.tan.z * 8 }, 1.1);
+      this.tmpV.y += 0.5 + car.yOff;
+      if (Math.random() < dt * 34) {
+        this.emit(this.fartSys, this.tmpV, { x: -f.tan.x * 9, z: -f.tan.z * 9 }, 1.0);
       }
     }
 
@@ -728,7 +736,7 @@ export class Race {
     this.traffic.forEach((v) => {
       if (v.retired || v.s >= this.track.length - 20) return;
       const ds = v.s - car.s;
-      if (ds > 4 && ds < 34 && Math.abs(v.x - car.x) < 3.4) {
+      if (ds > 4 - v.halfLen && ds < 34 + v.halfLen && Math.abs(v.x - car.x) < 3.4) {
         targetX = v.x > car.x ? v.x - 5.4 : v.x + 5.4;
       }
     });
@@ -843,7 +851,7 @@ export class Race {
       } else if (!v.oncoming && v.s > anchor + 1600) {
         if (!respawn(340, 1000, LANE_PLAYER, 3, 115)) return;
       }
-      const visible = Math.abs(v.s - anchor) < 1300;
+      const visible = Math.abs(v.s - anchor) < 2000;
       v.group.visible = visible;
       if (visible) {
         this.track.worldPos(v.s, v.x, this.tmpV);
@@ -875,27 +883,31 @@ export class Race {
         audio.honk();
       }
 
-      // LEAPFROG: an active wheelie near an oncoming vehicle launches you
-      // over it — generous window so the move is landable at closing speed.
-      if (isPlayer && car.wheelieT > 0 && car.grounded && v.oncoming
-        && v.clearedBy !== car && ds > -2 && ds < 26
-        && Math.abs(v.x - car.x) < (v.wrongWay ? 5.4 : 3.4)) {
+      // LEAPFROG: an active wheelie near any vehicle in your path launches you
+      // over it, oncoming or same-way, like the cabinet's double-tap turbo.
+      // Generous window so the move is landable at closing speed.
+      const leapWindow = v.oncoming ? 26 : 16 + v.halfLen;
+      if (isPlayer && car.wheelieT > 0 && car.grounded
+        && v.clearedBy !== car && ds > -2 && ds < leapWindow
+        && Math.abs(v.x - car.x) < (v.wrongWay ? 5.4 : 3.6)) {
         v.clearedBy = car;
         car.grounded = false;
-        car.vy = 15;
+        car.vy = v.oncoming ? 15 : 13.5;
         car.airTime = 0;
         car.airSource = 'leapfrog';
         car.stuntsLanded++;
         this.timeLeft += 1;
         audio.bigAir();
-        audio.announce('Leapfrog!');
-        this.onEvent('toast', 'LEAPFROG! +1s');
+        audio.announce(v.oncoming ? 'Leapfrog!' : 'Hop!');
+        this.onEvent('toast', v.oncoming ? 'LEAPFROG! +1s' : 'TRAFFIC HOP! +1s');
         this.onEvent('haptic', 'leapfrog');
         return;
       }
 
       const hitW = car.twoWheelT > 0 ? 1.7 : 3.1;
-      if (absDs < (v.w + 3) * 0.62 && Math.abs(v.x - car.x) < hitW && car.yOff < v.h * 0.75) {
+      // The player's nose is ~2.6 ahead of its anchor; the vehicle spans
+      // +-halfLen around its anchor.
+      if (absDs < v.halfLen + 2.6 && Math.abs(v.x - car.x) < hitW && car.yOff < v.h * 0.75) {
         if (v.clearedBy === car) return;
         if (car.invuln > 0) return;
         v.clearedBy = car;
@@ -950,7 +962,7 @@ export class Race {
       if (a.s < anchor - 120 || a.s > anchor + 2400) {
         a.reset(anchor + 700 + Math.random() * 1400);
       }
-      const visible = Math.abs(a.s - anchor) < 1200;
+      const visible = Math.abs(a.s - anchor) < 1800;
       a.group.visible = visible;
       if (!visible) return;
 
@@ -1248,12 +1260,15 @@ export class Race {
         const full = car.isPlayer ? (car.wheelieFullT || WHEELIE_TIME) : 1.2;
         const t = car.isPlayer ? car.wheelieT : car.aiWheelieT;
         const elapsed = full - t;
-        // Nose snaps up fast, holds, and settles as the wheelie ends.
+        // Nose snaps up fast, holds, and settles as the wheelie ends. The
+        // quad's roof rotates toward the camera (positive local X), which is
+        // what a rear-axle wheelie looks like from the chase seat; the
+        // opposite sign read as the car diving nose-first.
         const k = Math.min(1, elapsed / 0.22) * Math.min(1, t / 0.3);
-        pitch = -0.58 * Math.max(0, k);
+        pitch = 0.62 * Math.max(0, k);
       }
       if (car.flipping) {
-        if (car.flipAxis === 'x') pitch = -car.flipProg;
+        if (car.flipAxis === 'x') pitch = car.flipProg;
         else roll = car.flipProg * (car.flipDir || 1);
       }
       if (car.twoWheelT > 0) {
@@ -1270,13 +1285,16 @@ export class Race {
       car.shadow.scale.set(sh, sh, 1);
     });
 
-    // Billboard traffic + animals toward the camera (yaw only).
+    // Traffic is real geometry: face the direction of travel, spin the
+    // wheels, and let a struck vehicle slew and rock instead of wobbling a card.
     this.traffic.forEach((v) => {
       if (!v.group.visible) return;
-      const p = v.group.position;
-      v.mesh.rotation.y = Math.atan2(camPos.x - p.x, camPos.z - p.z);
-      v.mesh.rotation.z = v.crashT > 0 ? Math.sin(v.crashSpin) * 0.22 : 0;
-      v.shadow.position.y = 0.06;
+      const heading = this.track.headingAt(v.s) + (v.oncoming ? Math.PI : 0);
+      const slew = v.crashT > 0 ? Math.sin(v.crashSpin * 0.6) * 0.9 : 0;
+      v.body.rotation.y = heading + slew;
+      v.body.rotation.z = v.crashT > 0 ? Math.sin(v.crashSpin) * 0.12 : 0;
+      const spin = (v.speed * dt) / 1.0;
+      v.wheels.forEach((w) => { w.rotation.x += spin; });
     });
     this.animals.forEach((a) => {
       if (!a.group.visible) return;
@@ -1288,15 +1306,28 @@ export class Race {
     this.shake = Math.max(0, this.shake - dt * 2.1);
   }
 
+  // Camera rigs per mode: how far behind and above the car, how far ahead
+  // the aim point sits, how much the aim is lifted toward the horizon, and
+  // the FOV that widens with speed. The arcade chase is deliberately low and
+  // close so the car is huge and the road rushes; speed pulls it back a touch
+  // so the car visibly surges away when the turbo hits.
+  static CAMERA_RIGS = [
+    { back: 10, ahead: 34, lift: 4.6, aim: 2.7, fov: 70, kick: 17, pull: 1.4 },
+    { back: 21, ahead: 60, lift: 12.25, aim: 5.6, fov: 64, kick: 8, pull: 0 },
+    { back: -1.2, ahead: 46, lift: 1.65, aim: 1.45, fov: 74, kick: 12, pull: 0 },
+  ];
+
   updateCamera(dt) {
     const car = this.player;
     const mode = this.cameraMode;
+    const rig = Race.CAMERA_RIGS[mode];
+    const speed01 = Math.min(1, car.speed / 66);
     let anchorPos;
     let lookPos;
     if (car.mode === 'shortcut' && this.track.shortcut) {
       const sc = this.track.shortcut;
-      const backDist = mode === 0 ? 21 : mode === 1 ? 9 : -1.2;
-      const aheadDist = mode === 0 ? 60 : mode === 1 ? 23 : 44;
+      const backDist = rig.back + rig.pull * speed01;
+      const aheadDist = rig.ahead;
       const backS = car.ss - backDist;
       const back = sc.frameAt(Math.max(0, backS));
       anchorPos = back.pos.clone().addScaledVector(back.left, car.sx || 0);
@@ -1304,15 +1335,15 @@ export class Race {
       const ahead = sc.frameAt(Math.min(sc.len, car.ss + aheadDist));
       lookPos = ahead.pos.clone();
     } else {
-      const backDist = this.demo ? 15 : mode === 0 ? 21 : mode === 1 ? 8.5 : -1.2;
-      const aheadDist = this.demo ? 29 : mode === 0 ? 60 : mode === 1 ? 26 : 46;
+      const backDist = this.demo ? 15 : rig.back + rig.pull * speed01;
+      const aheadDist = this.demo ? 29 : rig.ahead;
       const laneX = this.demo ? car.x * 0.75 : car.x;
       const backS = car.s - backDist;
       anchorPos = this.track.worldPos(Math.max(0, backS), laneX);
       if (backS < 0) anchorPos.addScaledVector(this.track.frameAt(0).tan, backS);
       lookPos = this.track.worldPos(car.s + aheadDist, laneX);
     }
-    let camLift = this.demo ? 6.4 : mode === 0 ? 12.25 : mode === 1 ? 4.7 : 1.65;
+    let camLift = this.demo ? 6.4 : rig.lift;
     // Finish crane: once the player crosses the line the camera rises, pulls
     // back, and drifts to the outside while the car coasts through the arch.
     let crane = 0;
@@ -1326,24 +1357,58 @@ export class Race {
       lookPos = car.worldPos(new THREE.Vector3());
       lookPos.y += 1.2;
     }
+    // Leapfrog hop: the chase camera rides up with the car so it clears the
+    // roof of the semi it is jumping instead of clipping through the trailer.
+    const hopping = !car.grounded && car.airSource === 'leapfrog' && !this.demo;
+    let hopTarget = hopping ? 3 + car.yOff * 0.65 : 0;
+    // ...and stays above any vehicle it just jumped until the camera itself
+    // has passed the far bumper, so landing early does not drop the view back
+    // inside the box.
+    if (!this.demo && this.traffic) {
+      const camS = car.s - (rig.back + rig.pull * speed01);
+      for (const v of this.traffic) {
+        if (v.clearedBy !== car || v.retired) continue;
+        if (Math.abs(v.s - camS) < v.halfLen + 4 && Math.abs(v.x - car.x) < 6) {
+          hopTarget = Math.max(hopTarget, v.h + 2.5 - rig.lift);
+        }
+      }
+    }
+    this.hopLift = (this.hopLift || 0) + (hopTarget - (this.hopLift || 0)) * Math.min(1, (hopTarget > (this.hopLift || 0) ? 14 : 6) * dt);
+    camLift += this.hopLift;
     const camY = anchorPos.y + camLift + car.yOff * (mode === 2 ? 0.9 : 0.35);
     if (!this.camInit) {
       this.camera.position.set(anchorPos.x, camY, anchorPos.z);
       this.camInit = true;
     } else {
-      this.camera.position.lerp(this.tmpV2.set(anchorPos.x, camY, anchorPos.z), Math.min(1, 5.8 * dt));
+      // Stiff follow. The old 5.8/s lerp trailed a 60 u/s car by ten units,
+      // which quietly undid the close rig and shrank the hero car in motion.
+      this.camera.position.lerp(this.tmpV2.set(anchorPos.x, camY, anchorPos.z), Math.min(1, 16 * dt));
     }
     if (this.shake > 0.01) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.55;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.4;
     }
-    // Aim closer to the horizon in high chase. This retains the requested
-    // elevated/wide traffic view without pitching 30 degrees into the road.
-    if (!crane) lookPos.y += (mode === 0 ? 5.6 : mode === 1 ? 2.1 : 1.45) + car.yOff * 0.25;
+    // High-frequency rumble above ~100 MPH: tiny, but it is what makes the
+    // top end feel strained rather than floaty.
+    const rumble = this.demo || crane ? 0 : Math.max(0, speed01 - 0.68) * 0.28 + (car.wheelieT > 0 ? 0.05 : 0);
+    this.speedRumble = rumble;
+    if (rumble > 0) {
+      this.camera.position.x += (Math.random() - 0.5) * rumble;
+      this.camera.position.y += (Math.random() - 0.5) * rumble * 0.7;
+    }
+    // Aim toward the horizon so the view stays level; the low rig still shows
+    // plenty of road because the camera sits just above the roofline.
+    // During a hop the raised camera tilts down so the flying car and the roof
+    // it clears stay in frame instead of dropping off the bottom edge.
+    if (!crane) lookPos.y += rig.aim + car.yOff * 0.25 - this.hopLift * 1.4;
     this.camera.lookAt(lookPos);
-    const speed01 = Math.min(1, car.speed / 66);
-    const baseFov = this.demo ? 62 : mode === 0 ? 64 : mode === 1 ? 68 : 72;
-    const targetFov = baseFov + speed01 * (mode === 2 ? 9 : 7) + (car.wheelieT > 0 ? 3 : 0) - crane * 10;
+    // A whisper of roll with lateral load sells the chassis leaning into bends.
+    if (!crane && !this.demo) {
+      this.camera.rotateZ(THREE.MathUtils.clamp(-car.lateralVel * 0.0032 - car.lean * 0.12, -0.05, 0.05));
+    }
+    const baseFov = this.demo ? 62 : rig.fov;
+    const kick = Math.pow(speed01, 1.35) * rig.kick;
+    const targetFov = baseFov + kick + (car.wheelieT > 0 ? 5 : 0) - crane * 10;
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, 5 * dt);
     this.camera.updateProjectionMatrix();
     this.updatePanoramaCrop();
@@ -1359,24 +1424,32 @@ export class Race {
   // frame after the camera is aimed; only cheap uniform math, no re-upload.
   updatePanoramaCrop() {
     if (!this.panoramaTexture || !this.camera) return;
+    const def = this.opts.trackDef;
+    const span = def.panoramaSpan || PANORAMA_SPAN;
+    const artAspect = def.panoramaAspect || PANORAMA_ASPECT;
+    const horizon = def.panoramaHorizon ?? 0.5;
     const viewAspect = Math.max(0.1, this.camera.aspect || PANORAMA_ASPECT);
     const vfov = THREE.MathUtils.degToRad(this.camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * viewAspect);
     // Visible slice of the art = the camera's horizontal FOV as a fraction of
     // the yaw span the painting represents, cropped to the view's aspect.
-    let fx = Math.min(1, hfov / PANORAMA_SPAN);
-    let fy = fx * PANORAMA_ASPECT / viewAspect;
+    let fx = Math.min(1, hfov / span);
+    let fy = fx * artAspect / viewAspect;
     if (fy > 1) {
       fy = 1;
-      fx = viewAspect / PANORAMA_ASPECT;
+      fx = viewAspect / artAspect;
     }
     this.camera.getWorldDirection(this.tmpV2);
     const yaw = Math.atan2(this.tmpV2.x, this.tmpV2.z);
     // World +x is screen-left in this right-handed frame: turning toward
     // increasing yaw makes the horizon slide right, i.e. the UV window moves
-    // toward smaller u.
+    // toward smaller u. Vertically the painting's horizon line is pinned to
+    // the middle of the view.
     this.panoramaTexture.repeat.set(fx, fy);
-    this.panoramaTexture.offset.set((1 - fx) * 0.5 - yaw * (fx / hfov), (1 - fy) * 0.5);
+    this.panoramaTexture.offset.set(
+      (1 - fx) * 0.5 - yaw * (fx / hfov),
+      THREE.MathUtils.clamp(horizon - fy * 0.5, 0, 1 - fy),
+    );
   }
 
   hud() {
@@ -1396,6 +1469,7 @@ export class Race {
       stage: this.opts.trackDef.name,
       zone: this.track.zoneOf(car.s).replaceAll('_', ' ').toUpperCase(),
       comeback: car.recoveryT > 0,
+      speed01: Math.min(1, car.speed / 66),
       camera: this.cameraModes[this.cameraMode],
       officialTime: Math.max(0, this.raceTime - this.stuntCredit),
       stuntCredit: this.stuntCredit,

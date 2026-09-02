@@ -1,15 +1,15 @@
 // CRUIS'N BEANS — screen flow, renderer, HUD.
 import * as THREE from '../vendor/three.module.js';
-import { RACERS, RIVALS, STAGES } from './data.js?v=next-level-1';
-import { Race } from './game.js?v=next-level-1';
-import { Input } from './input.js?v=next-level-1';
-import { audio } from './audio.js?v=next-level-1';
-import { rivalRearTexture } from './tex.js?v=next-level-1';
-import { Records, defaultInitials, formatTime as fmtTime } from './records.js?v=next-level-1';
+import { RACERS, RIVALS, STAGES } from './data.js?v=world-feel-2';
+import { Race } from './game.js?v=world-feel-2';
+import { Input } from './input.js?v=world-feel-2';
+import { audio } from './audio.js?v=world-feel-2';
+import { rivalRearTexture } from './tex.js?v=world-feel-2';
+import { Records, defaultInitials, formatTime as fmtTime } from './records.js?v=world-feel-2';
 import {
   createTour, currentStageId, isFinalStage, recordLeg, standings as tourStandings,
   playerStanding, advance as advanceTour,
-} from './tour.js?v=next-level-1';
+} from './tour.js?v=world-feel-2';
 
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 if (Number.isFinite(seedParam) && seedParam > 0) {
@@ -108,6 +108,7 @@ window.addEventListener('resize', resize);
 const screens = ['title', 'racer', 'track', 'hud', 'results'];
 function show(name) {
   screens.forEach((s) => $(`#screen-${s}`).classList.toggle('visible', s === name || (name === 'race' && s === 'hud')));
+  if (name !== 'race') $('#speed-rush').style.opacity = '0';
   mode = name;
 }
 
@@ -338,7 +339,7 @@ function startRace() {
   }
   race.camera.aspect = window.innerWidth / window.innerHeight;
   race.camera.updateProjectionMatrix();
-  $('#btn-camera small').textContent = 'HIGH';
+  $('#btn-camera small').textContent = 'ARCADE';
   show('race');
   audio.startEngine();
 
@@ -703,6 +704,7 @@ const hudBeans = $('#hud-beans');
 const hudProgress = $('#hud-progress-fill');
 const hudLocation = $('#hud-location');
 const dangerAlert = $('#danger-alert');
+const speedRush = $('#speed-rush');
 
 function paintHUD() {
   const h = race.hud();
@@ -720,6 +722,9 @@ function paintHUD() {
   hudLocation.innerHTML = `${h.stage} <small>${h.zone}</small>`;
   dangerAlert.classList.toggle('show', h.danger);
   document.body.classList.toggle('comeback', h.comeback);
+  // Edge rush fades in from ~85 MPH and peaks with the wheelie turbo.
+  const rush = Math.max(0, (h.speed01 - 0.58) / 0.42);
+  speedRush.style.opacity = (Math.min(1, rush * rush) * (h.wheelie ? 1 : 0.8)).toFixed(2);
 
   if (clockSecond <= 8 && clockSecond !== lastClockBeep) {
     lastClockBeep = clockSecond;

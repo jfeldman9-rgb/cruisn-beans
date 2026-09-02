@@ -13,7 +13,11 @@ for (const stage of STAGES) {
   const path = localPath(stage.panorama);
   await access(path);
   const image = await loadImage(path);
-  assert.ok(image.width >= 1600 && image.height >= 900, `${stage.id} panorama is undersized`);
+  assert.ok(image.width >= 1600 && image.height >= 800, `${stage.id} panorama is undersized`);
+  if (stage.panoramaAspect) {
+    assert.ok(Math.abs(image.width / image.height - stage.panoramaAspect) < 0.01,
+      `${stage.id} panoramaAspect ${stage.panoramaAspect} does not match the art (${image.width}x${image.height})`);
+  }
 }
 
 for (const racer of [...RACERS, ...RIVALS]) {

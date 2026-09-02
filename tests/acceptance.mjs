@@ -200,7 +200,8 @@ for (let i = 0; i < STAGES.length; i++) {
 }
 
 // 6. Every dirty branch is genuinely shorter and carries its own CP banner.
-const expectedSavings = [349.2, 347.9, 429.5];
+// Hawaii's jungle cut now leaves inland (the sea owns the right-hand side).
+const expectedSavings = [378.7, 347.9, 429.5];
 for (let i = 0; i < STAGES.length; i++) {
   const { race } = makeRace(i);
   const sc = race.track.shortcut;
@@ -261,21 +262,24 @@ for (let i = 0; i < STAGES.length; i++) {
   finish.results.filter((r) => !r.finished).forEach((r) => assert.equal(r.time, null));
 }
 
-// 9. Default camera is high, far, nearly level, and frames every production car.
+// 9. Default camera is the cabinet chase: low, close, wide, nearly level, and
+//    it frames every production car large without losing the road ahead.
 {
   const { race } = makeRace(0);
   const p = race.player;
   p.s = 1000; p.x = 6; p.speed = 60; p.lean = 0.3;
   race.updateCamera(1);
   const carPos = p.worldPos();
-  assert.ok(race.camera.position.distanceTo(carPos) > 24);
-  assert.ok(race.camera.position.y - carPos.y > 12);
-  assert.ok(race.camera.fov < 76);
+  const camDist = race.camera.position.distanceTo(carPos);
+  assert.ok(camDist > 10 && camDist < 15, `chase camera distance ${camDist.toFixed(1)}`);
+  const camRise = race.camera.position.y - carPos.y;
+  assert.ok(camRise > 3.5 && camRise < 6.5, `chase camera rise ${camRise.toFixed(1)}`);
+  assert.ok(race.camera.fov > 80 && race.camera.fov < 92, `chase FOV at speed ${race.camera.fov.toFixed(1)}`);
   assert.equal(p.visualScale, 1.04);
   race.camera.updateMatrixWorld(true);
   const direction = new THREE.Vector3();
   race.camera.getWorldDirection(direction);
-  assert.ok(Math.abs(Math.asin(direction.y)) < THREE.MathUtils.degToRad(7), 'camera pitch is too steep');
+  assert.ok(Math.abs(Math.asin(direction.y)) < THREE.MathUtils.degToRad(12), 'camera pitch is too steep');
   const shares = RACERS.map((racer) => {
     const carBottom = carPos.clone().project(race.camera);
     const carTopWorld = carPos.clone();
@@ -284,8 +288,11 @@ for (let i = 0; i < STAGES.length; i++) {
     return Math.abs(carTop.y - carBottom.y) / 2;
   });
   cameraScreenShare = Math.max(...shares);
-  shares.forEach((share) => assert.ok(share > 0.105 && share < 0.16,
+  shares.forEach((share) => assert.ok(share > 0.18 && share < 0.32,
     `production car height ${(share * 100).toFixed(1)}%`));
+  // The car must sit in the lower half so the road ahead stays readable.
+  const carBottomNdc = carPos.clone().project(race.camera).y;
+  assert.ok(carBottomNdc < -0.3 && carBottomNdc > -0.7, `car base at NDC y=${carBottomNdc.toFixed(2)}`);
   race.updateVisuals(1 / 60);
   assert.ok(Math.abs(p.mesh.rotation.z) <= 0.0501);
   assert.ok(p.mesh.scale.x > 0, 'car art must not mirror on a bend');
@@ -294,7 +301,7 @@ for (let i = 0; i < STAGES.length; i++) {
   race.updateVisuals(1 / 60);
   assert.ok(p.mesh.scale.x > 0, 'car art must not mirror during a crash');
   close(p.mesh.rotation.y, stableYaw, 0.001);
-  assert.equal(race.cycleCamera(), 'ARCADE CHASE');
+  assert.equal(race.cycleCamera(), 'HIGH CHASE');
   assert.equal(race.cycleCamera(), 'BUMPER');
 }
 
@@ -385,4 +392,4 @@ for (let i = 0; i < STAGES.length; i++) {
   assert.equal(race.timeLeft, clock + 3);
 }
 
-console.log(`Cruis'n Beans acceptance: 13/13 systems passed; high-chase car height ${(cameraScreenShare * 100).toFixed(1)}% of frame.`);
+console.log(`Cruis'n Beans acceptance: 13/13 systems passed; arcade-chase car height ${(cameraScreenShare * 100).toFixed(1)}% of frame.`);
